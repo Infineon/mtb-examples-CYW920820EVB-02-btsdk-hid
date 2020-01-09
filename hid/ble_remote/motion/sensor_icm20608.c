@@ -226,7 +226,7 @@ static void ICM20608_ACC_Config(void)
 void ICM20608_Init(void)
 {
   uint8_t buf[1];
-WICED_BT_TRACE("ICM20608_Init \n");
+WICED_BT_TRACE("\nICM20608_Init ");
 
 //  ICM20608_HAL_Init();
   // Read WHO AM I
@@ -281,7 +281,7 @@ void ICM20608_ACC_Stop(void)
 void ICM20608_GYROACC_Start(void)
 {
   // start sensor
-WICED_BT_TRACE("gyroacc: start sensor\n");
+WICED_BT_TRACE("\ngyroacc: start sensor");
   ICM20608_pwrMgmt2Val &= ~(ICM20608_PWR_MGMT_2_ACCEL_OFF | ICM20608_PWR_MGMT_2_GYRO_OFF);
   ICM20608_RegWrite(ICM20608_REG_PWR_MGMT_2, &ICM20608_pwrMgmt2Val, 1);
 }

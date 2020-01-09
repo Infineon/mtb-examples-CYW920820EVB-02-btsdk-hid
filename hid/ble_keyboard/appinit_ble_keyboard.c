@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -36,10 +36,9 @@
  * Entry point to LE keyboard application.
  *
  */
-#include "blehidhci.h"
-#include "blehidgatts.h"
 #include "ble_keyboard.h"
 #include "wiced_bt_trace.h"
+#include "hidd_lib.h"
 
 #ifdef TESTING_USING_HCI
 static hci_rpt_db_t hci_rpt_db[] =
@@ -52,15 +51,29 @@ static hci_rpt_db_t hci_rpt_db[] =
 #define HCI_CONTROL_RPT_CNT (sizeof(hci_rpt_db)/sizeof(hci_rpt_db_t))
 #endif
 
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+void app_LED_init(void)
+{
+    kb_LED_init(LED_CAPS, LED_OFF_LEVEL);
+    kb_LED_init(LED_BLUE, LED_OFF_LEVEL);
+#ifdef KEYBOARD_PLATFORM
+    kb_LED_init(LED_GREEN, LED_OFF_LEVEL);
+    kb_LED_init(LED_RED, LED_OFF_LEVEL);
+#endif
+}
 /******************************************************************************
  *                          Function Definitions
 ******************************************************************************/
 
 wiced_result_t blehid_app_init(void)
 {
+    wiced_result_t result;
     /*  GATT DB Initialization  */
-    if ( blehid_gatts_init( blehid_db_data, blehid_db_size, NULL, NULL ) != WICED_BT_SUCCESS )
+    if ( (result=wiced_hidd_gatts_init( blehid_db_data, blehid_db_size, blehid_gattAttributes, blehid_gattAttributes_size, NULL, NULL )) != WICED_BT_SUCCESS )
     {
+        WICED_BT_TRACE("\nwiced_hidd_gatts_init failed, result=%d",result);
+        wiced_hidd_led_blink_error(KB_LED_ERROR, LED_ERROR_CODE_GATTS);
         return WICED_BT_ERROR;
     }
 
@@ -86,49 +99,34 @@ void application_start( void )
     //restore content from AON memory when wake up from shutdown sleep (SDS)
     kbapp_aon_restore();
 
-    wiced_ble_hidd_start("kbApp", blehid_app_init, NULL, &wiced_bt_hid_cfg_settings, wiced_bt_hid_cfg_buf_pools);
+    wiced_hidd_start(blehid_app_init, NULL, &wiced_bt_hid_cfg_settings, wiced_bt_hid_cfg_buf_pools);
+    hci_control_init(HCI_CONTROL_RPT_CNT, hci_rpt_db);
 
-#ifdef TESTING_USING_HCI
-    WICED_BT_TRACE( "TESTING_USING_HCI.......:Yes\n");
-    hci_control_le_init(HCI_CONTROL_RPT_CNT, hci_rpt_db);
-#else
-    WICED_BT_TRACE( "TESTING_USING_HCI.......:No\n");
-#endif
+    WICED_BT_TRACE("\nSLEEP_ALLOWED=%d",SLEEP_ALLOWED);
+    WICED_BT_TRACE("\nLED SUPPORT=%d", LED_SUPPORT);
 
 #ifdef OTA_FIRMWARE_UPGRADE
-    WICED_BT_TRACE( "OTA_FW_UPGRADE..........:Yes\n");
+    WICED_BT_TRACE("\nOTA_FW_UPGRADE");
  #ifdef OTA_SECURE_FIRMWARE_UPGRADE
-    WICED_BT_TRACE( "OTA_SEC_FW_UPGRADE......:Yes\n");
- #else
-    WICED_BT_TRACE( "OTA_SEC_FW_UPGRADE......:No\n");
+    WICED_BT_TRACE("\nOTA_SEC_FW_UPGRADE");
  #endif
-#else
-    WICED_BT_TRACE( "OTA_FW_UPGRADE..........:No\n");
-    WICED_BT_TRACE( "OTA_SEC_FW_UPGRADE......:No\n");
 #endif
 
 #ifdef ASSYM_SLAVE_LATENCY
-    WICED_BT_TRACE( "ASSYMETRIC_SLAVE_LATENCY:Yes\n");
-#else
-    WICED_BT_TRACE( "ASSYMETRIC_SLAVE_LATENCY:No\n");
+    WICED_BT_TRACE("\nASSYMETRIC_SLAVE_LATENCY");
 #endif
 
 #ifdef LE_LOCAL_PRIVACY_SUPPORT
-    WICED_BT_TRACE( "LE_LOCAL_PRIVACY........:Yes\n");
-#else
-    WICED_BT_TRACE( "LE_LOCAL_PRIVACY........:No\n");
+    WICED_BT_TRACE("\nLE_LOCAL_PRIVACY");
 #endif
 
 #ifdef SKIP_CONNECT_PARAM_UPDATE_EVEN_IF_NO_PREFERED
-    WICED_BT_TRACE( "SKIP_PARAM_UPDATE.......:Yes\n");
-#else
-    WICED_BT_TRACE( "SKIP_PARAM_UPDATE.......:No\n");
+    WICED_BT_TRACE("\nSKIP_PARAM_UPDATE");
 #endif
 
 #ifdef AUTO_RECONNECT
-    WICED_BT_TRACE( "AUTO_RECONNECT..........:Yes\n");
-#else
-    WICED_BT_TRACE( "AUTO_RECONNECT..........:No\n");
+    WICED_BT_TRACE("\nAUTO_RECONNECT");
 #endif
 
+    wiced_hidd_led_blink(LED_BLUE, 5, 100);  // fast 5 blinks to indicate firmware is up and running
 }

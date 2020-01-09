@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -225,7 +225,7 @@ static uint8_t TouchPad_waitForFingerDown()
     // no finger is down, something is wrong, reset the TP
     if (!pDev->verifiedWorking && !tpDrv->readFirmwareVersion(ver))   // touchpad is not functional
     {
-//WICED_BT_TRACE("\ntp re-init\n");
+//WICED_BT_TRACE("\ntp re-init");
         TouchPad_reInitialize();
     }
     return FALSE;
@@ -404,7 +404,7 @@ uint8_t TouchPad_pollActivity(HidEventTouchpad* dataPtr, uint8_t ignore)
         //dataPtr->ptr = &pDev->tpData[pDev->fifoIndex];
         dataPtr->userDataPtr = &pDev->tpData[pDev->fifoIndex];
 
-        //WICED_BT_TRACE("fc=%d\n", newFingerCnt);
+        //WICED_BT_TRACE("\nfc=%d", newFingerCnt);
         if (++pDev->fifoIndex >= TOUCHPAD_FIFO_CNT)
         {
             pDev->fifoIndex = 0;

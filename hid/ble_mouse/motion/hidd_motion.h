@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -39,67 +39,30 @@
 
 #ifdef SUPPORT_MOTION
 
-#ifndef __PAW3805_OPTICALSENSOR_H__
-#define __PAW3805_OPTICALSENSOR_H__
+#ifndef __HIDD_MOTION_H__
+#define __HIDD_MOTION_H__
 
 #include "wiced.h"
 #include "data_types.h"
 
-typedef struct
-{
-    uint8_t       rw;         // read or write
-    uint8_t       regoffset;   // register offset
-    uint8_t       value;       // write value
-}PAWSensorRegSeq;
+typedef enum {
+    MOTION_NOT_FOUND,
+    MOTION_WARMUP,
+    MOTION_SHUTDOWN,
+    MOTION_SLEEP,
+    MOTION_ACTIVE
+} motion_state_t;
 
-//////////////////////////////////
-/// Optical Sensor Config for PAW optical sensor
-//////////////////////////////////
-typedef struct
-    {
-    /// the GPIO pin the CS line is connected to
-    uint8_t cs_gpio;
+// int32_t pinCfg contains CS:CLK:MOSI:MISO pin numbers
+wiced_bool_t motion_init(void (*userfn)(void*, uint8_t), void* userdata, uint32_t pinCfg, uint8_t pinIntr);
+wiced_bool_t motion_isActive(void);
+wiced_bool_t motion_isEnabled(void);
+wiced_bool_t motion_isFound(void);
+wiced_bool_t motion_getMotion(int16_t *x, int16_t *y, uint8_t MaxPoll);
+motion_state_t  motion_getState(void);
 
-    /// the GPIO pin the motion line is connected to
-    uint8_t motion_gpio;
-
-    /// SPI speed to use for the 7050.
-    uint32_t spiSpeed;
-
-} PAWsensor_Config;
-
-enum
-{
-    // This bit must be set in the address byte of every write to
-    WRITE_CMD_BIT  = 0x80,
-
-    CS_ASSERT       = 0,    // low active
-    CS_DEASSERT     = 1,
-};
-
-enum PAWSENSOR_ACT_PROCEDURE_ID
-{
-    /// perform spi read and compare
-    PAWSENSOR_READCOMPARE            =  1  ,
-
-    /// just read the sensor register via spi interferace, ignore the read result
-    PAWSENSOR_READONLY               =  2  ,
-
-    /// write the sensor register
-    PAWSENSOR_WRITE                  =  3  ,
-
-    /// compare with previoue read value,
-    /// the regoffset will become mask
-    PAWSENSOR_COMPARE                  =  4  ,
-};
-
-void PAW3805_init(void (*userfn)(void*, uint8_t), void* userdata);
-void PAW3805_enable_Interrupt(wiced_bool_t enabled);
-void PAW3805_getMotion(int16_t *x, int16_t *y);
-void PAW3805_flushMotion(void);
-wiced_bool_t PAW3805_isActive(void);
-void PAW3805_powerdown(void);
-void PAW3805_enable_deep_sleep_mode(void);
+void motion_powerDown(void);
+void motion_enableIntr(wiced_bool_t enabled);
 
 #endif
 

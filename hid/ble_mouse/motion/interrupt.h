@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -62,6 +62,7 @@ typedef struct
 
 void Interrupt_init(Intr_State * state, void (*callBack)(void*, uint8_t), void *userdata, uint8_t gpio, uint8_t activeLogic, uint16_t config);
 void Interrupt_setInterruptEnable(Intr_State * state, uint8_t en);
+void Interrupt_enableInterrupt(Intr_State * state);
 void Interrupt_clearInterrupt(Intr_State * state) ;
 uint8_t Interrupt_isInterruptPending(Intr_State * state);
 uint8_t Interrupt_isInterruptEnabled(Intr_State * state);

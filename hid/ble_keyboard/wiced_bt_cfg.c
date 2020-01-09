@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -54,7 +54,6 @@ const uint8_t dev_appearance_name[2]     = {BIT16_TO_8(APPEARANCE_HID_KEYBOARD)}
 const uint8_t dev_pnp_id[]               ={0x01, 0x31, 0x01, 0xB4, 0x04, 0x01, 0x00}; //BT SIG, cypress semiconductor, 0x04B4, 0x0001
 const char dev_char_mfr_name_value[]     = "Cypress Semiconductor";
 
-
 const uint8_t   rpt_ref_battery[]             = {BATTERY_REPORT_ID ,0x01};
 const uint8_t   rpt_ref_std_key_input[]       = {STD_KB_REPORT_ID,0x01};
 const uint8_t   rpt_ref_std_key_output[]      = {STD_KB_REPORT_ID,0x02};
@@ -66,7 +65,10 @@ const uint8_t   rpt_ref_connection_ctrl[]     = {0xCC,0x03}; //feature rpt
 
 const uint8_t dev_hid_information[] = {0x00, 0x01, 0x00, 0x00};      // Verison 1.00, Not localized, Cannot remote wake, not normally connectable
 const uint16_t dev_battery_service_uuid = UUID_CHARACTERISTIC_BATTERY_LEVEL;
-
+#define INCLUDE_GATT_SERVICE_CHANGED 1
+#if INCLUDE_GATT_SERVICE_CHANGED
+uint8_t hid_service_changed[]            = {0x00,0x00,0x00,0x00};
+#endif
 
 extern uint16_t characteristic_client_configuration[];
 extern uint8_t kbapp_protocol;
@@ -97,105 +99,115 @@ const uint8_t blehid_db_data[]=
 {
     // Declare gatt service
     PRIMARY_SERVICE_UUID16
-        ( HANDLE_BLEKB_GATT_SERVICE, UUID_SERVCLASS_GATT_SERVER ),
+    ( HANDLE_BLEKB_GATT_SERVICE, UUID_SERVCLASS_GATT_SERVER ),
 
-   // Declare GAP service. Device Name and Appearance are mandatory
+#if INCLUDE_GATT_SERVICE_CHANGED
+    CHARACTERISTIC_UUID16
+    (
+        HANDLE_BLEKB_GATT_SERVICE_CHANGED,
+        HANDLE_BLEKB_GATT_SERVICE_CHANGED_VAL,
+        GATT_UUID_GATT_SRV_CHGD,
+        LEGATTDB_CHAR_PROP_NOTIFY,
+        LEGATTDB_PERM_NONE
+    ),
+#endif
+
+    // Declare GAP service. Device Name and Appearance are mandatory
     // characteristics of GAP service
     PRIMARY_SERVICE_UUID16
-        ( HANDLE_BLEKB_GAP_SERVICE, UUID_SERVCLASS_GAP_SERVER ),
+    ( HANDLE_BLEKB_GAP_SERVICE, UUID_SERVCLASS_GAP_SERVER ),
 
     // Declare mandatory GAP service characteristic: Dev Name
     CHARACTERISTIC_UUID16
-        (
-          HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_NAME,
-          HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_NAME_VAL,
-          GATT_UUID_GAP_DEVICE_NAME,
-          LEGATTDB_CHAR_PROP_READ,
-          LEGATTDB_PERM_READABLE
-        ),
+    (
+        HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_NAME,
+        HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_NAME_VAL,
+        GATT_UUID_GAP_DEVICE_NAME,
+        LEGATTDB_CHAR_PROP_READ,
+        LEGATTDB_PERM_READABLE
+    ),
 
     // Declare mandatory GAP service characteristic: Appearance
     CHARACTERISTIC_UUID16
-       (
-         HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_APPEARANCE,
-         HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_APPEARANCE_VAL,
-         GATT_UUID_GAP_ICON,
-         LEGATTDB_CHAR_PROP_READ,
-         LEGATTDB_PERM_READABLE
-       ),
+    (
+        HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_APPEARANCE,
+        HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_APPEARANCE_VAL,
+        GATT_UUID_GAP_ICON,
+        LEGATTDB_CHAR_PROP_READ,
+        LEGATTDB_PERM_READABLE
+    ),
 
     // Declare GAP service characteristic: Peripheral Prefered Connection Parameter
     CHARACTERISTIC_UUID16
-       (
-         HANDLE_BLEKB_GAP_SERVICE_CHAR_PERI_PREFER_CONNPARAM,
-         HANDLE_BLEKB_GAP_SERVICE_CHAR_PERI_PREFER_CONNPARAM_VAL,
-         GATT_UUID_GAP_PREF_CONN_PARAM,
-         LEGATTDB_CHAR_PROP_READ,
-         LEGATTDB_PERM_READABLE
-       ),
+    (
+        HANDLE_BLEKB_GAP_SERVICE_CHAR_PERI_PREFER_CONNPARAM,
+        HANDLE_BLEKB_GAP_SERVICE_CHAR_PERI_PREFER_CONNPARAM_VAL,
+        GATT_UUID_GAP_PREF_CONN_PARAM,
+        LEGATTDB_CHAR_PROP_READ,
+        LEGATTDB_PERM_READABLE
+    ),
 
     // Declare Device info service
     PRIMARY_SERVICE_UUID16
-        ( HANDLE_BLEKB_DEV_INFO_SERVICE, UUID_SERVCLASS_DEVICE_INFO ),
+    ( HANDLE_BLEKB_DEV_INFO_SERVICE, UUID_SERVCLASS_DEVICE_INFO ),
 
     // Handle 0x29: characteristic PnP ID, handle 0x2A characteristic value
     CHARACTERISTIC_UUID16
-        (
-          HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_PNP_ID,
-          HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_PNP_ID_VAL,
-          GATT_UUID_PNP_ID,
-          LEGATTDB_CHAR_PROP_READ,
-          LEGATTDB_PERM_READABLE
-        ),
+    (
+        HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_PNP_ID,
+        HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_PNP_ID_VAL,
+        GATT_UUID_PNP_ID,
+        LEGATTDB_CHAR_PROP_READ,
+        LEGATTDB_PERM_READABLE
+    ),
 
     // Handle 0x2B: characteristic Manufacturer Name, handle 0x2C characteristic value
     CHARACTERISTIC_UUID16
-        (
-          HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_MFR_NAME,
-          HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_MFR_NAME_VAL,
-          GATT_UUID_MANU_NAME,
-          LEGATTDB_CHAR_PROP_READ,
-          LEGATTDB_PERM_READABLE
-        ),
+    (
+        HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_MFR_NAME,
+        HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_MFR_NAME_VAL,
+        GATT_UUID_MANU_NAME,
+        LEGATTDB_CHAR_PROP_READ,
+        LEGATTDB_PERM_READABLE
+    ),
 
-   // Declare Battery service
-   PRIMARY_SERVICE_UUID16
-        ( HANDLE_BLEKB_BATTERY_SERVICE, UUID_SERVCLASS_BATTERY),
+    // Declare Battery service
+    PRIMARY_SERVICE_UUID16
+    ( HANDLE_BLEKB_BATTERY_SERVICE, UUID_SERVCLASS_BATTERY),
 
-   // Handle 0x31: characteristic Battery Level, handle 0x32 characteristic value
-   CHARACTERISTIC_UUID16
-        (
-          HANDLE_BLEKB_BATTERY_SERVICE_CHAR_LEVEL,       // attribute handle
-          HANDLE_BLEKB_BATTERY_SERVICE_CHAR_LEVEL_VAL, // attribute value handle
-          GATT_UUID_BATTERY_LEVEL,
-          LEGATTDB_CHAR_PROP_READ|LEGATTDB_CHAR_PROP_NOTIFY,
-          LEGATTDB_PERM_READABLE
-        ),
+    // Handle 0x31: characteristic Battery Level, handle 0x32 characteristic value
+    CHARACTERISTIC_UUID16
+    (
+        HANDLE_BLEKB_BATTERY_SERVICE_CHAR_LEVEL,       // attribute handle
+        HANDLE_BLEKB_BATTERY_SERVICE_CHAR_LEVEL_VAL, // attribute value handle
+        GATT_UUID_BATTERY_LEVEL,
+        LEGATTDB_CHAR_PROP_READ|LEGATTDB_CHAR_PROP_NOTIFY,
+        LEGATTDB_PERM_READABLE
+    ),
 
-   // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
+    // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
     // Value modified shall be retained during connection and across connection // for bonded devices
-   CHAR_DESCRIPTOR_UUID16_WRITABLE
+    CHAR_DESCRIPTOR_UUID16_WRITABLE
     (
         HANDLE_BLEKB_BATTERY_SERVICE_CHAR_CFG_DESCR,
         GATT_UUID_CHAR_CLIENT_CONFIG,
         LEGATTDB_PERM_READABLE|LEGATTDB_PERM_WRITE_CMD|LEGATTDB_PERM_WRITE_REQ
     ),
 
-   // Handle 0x34: report reference
-   CHAR_DESCRIPTOR_UUID16
+    // Handle 0x34: report reference
+    CHAR_DESCRIPTOR_UUID16
     (
         HANDLE_BLEKB_BATTERY_SERVICE_RPT_REF_DESCR,
         GATT_UUID_RPT_REF_DESCR,
         LEGATTDB_PERM_READABLE
     ),
 
+    // Declare Scan Parameters service
+    PRIMARY_SERVICE_UUID16
+    ( HANDLE_BLEKB_SCAN_PARAM_SERVICE, UUID_SERVCLASS_SCAN_PARAM),
 
-   // Declare Scan Parameters service
-   PRIMARY_SERVICE_UUID16
-        ( HANDLE_BLEKB_SCAN_PARAM_SERVICE, UUID_SERVCLASS_SCAN_PARAM),
-
-   // Handle 0x41: characteristic Battery Level, handle 0x42 characteristic value
-   CHARACTERISTIC_UUID16_WRITABLE
+    // Handle 0x41: characteristic Battery Level, handle 0x42 characteristic value
+    CHARACTERISTIC_UUID16_WRITABLE
     (
         HANDLE_BLEKB_SCAN_PARAM_SERVICE_CHAR_SCAN_INT_WINDOW,
         HANDLE_BLEKB_SCAN_PARAM_SERVICE_CHAR_SCAN_INT_WINDOW_VAL,
@@ -204,9 +216,9 @@ const uint8_t blehid_db_data[]=
         LEGATTDB_PERM_WRITE_CMD | LEGATTDB_PERM_WRITE_REQ
     ),
 
-   // Declare HID over LE
-   PRIMARY_SERVICE_UUID16
-        ( HANDLE_BLEKB_LE_HID_SERVICE, UUID_SERVCLASS_LE_HID),
+    // Declare HID over LE
+    PRIMARY_SERVICE_UUID16
+    ( HANDLE_BLEKB_LE_HID_SERVICE, UUID_SERVCLASS_LE_HID),
 
 
     // Include BSA SERVICE
@@ -250,9 +262,9 @@ const uint8_t blehid_db_data[]=
     ),
 
 
-   // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
+    // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
     // Value modified shall be retained during connection and across connection // for bonded devices
-   CHAR_DESCRIPTOR_UUID16_WRITABLE
+    CHAR_DESCRIPTOR_UUID16_WRITABLE
     (
         HANDLE_BLEKB_LE_HID_SERVICE_HID_BT_KB_INPUT_CHAR_CFG_DESCR,
         GATT_UUID_CHAR_CLIENT_CONFIG,
@@ -281,9 +293,9 @@ const uint8_t blehid_db_data[]=
     ),
 
 
-   // include Battery Service
-   // Handle 0x5C: external report reference
-   CHAR_DESCRIPTOR_UUID16
+    // include Battery Service
+    // Handle 0x5C: external report reference
+    CHAR_DESCRIPTOR_UUID16
     (
         HANDLE_BLEKB_LE_HID_SERVICE_EXT_RPT_REF_DESCR,
         GATT_UUID_EXT_RPT_REF_DESCR,
@@ -302,17 +314,17 @@ const uint8_t blehid_db_data[]=
         LEGATTDB_PERM_READABLE
     ),
 
-   // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
+    // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
     // Value modified shall be retained during connection and across connection // for bonded devices
-   CHAR_DESCRIPTOR_UUID16_WRITABLE
+    CHAR_DESCRIPTOR_UUID16_WRITABLE
     (
         HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_INPUT_CHAR_CFG_DESCR,
         GATT_UUID_CHAR_CLIENT_CONFIG,
         LEGATTDB_PERM_READABLE|LEGATTDB_PERM_WRITE_CMD|LEGATTDB_PERM_WRITE_REQ
     ),
 
-   // Handle 0x60: report reference
-   CHAR_DESCRIPTOR_UUID16
+    // Handle 0x60: report reference
+    CHAR_DESCRIPTOR_UUID16
     (
         HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_INPUT_RPT_REF_DESCR,
         GATT_UUID_RPT_REF_DESCR,
@@ -330,8 +342,8 @@ const uint8_t blehid_db_data[]=
         LEGATTDB_PERM_READABLE|LEGATTDB_PERM_WRITE_CMD|LEGATTDB_PERM_WRITE_REQ
     ),
 
-   // Handle 0x63: report reference
-   CHAR_DESCRIPTOR_UUID16
+    // Handle 0x63: report reference
+    CHAR_DESCRIPTOR_UUID16
     (
         HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_OUTPUT_RPT_REF_DESCR,
         GATT_UUID_RPT_REF_DESCR,
@@ -349,17 +361,17 @@ const uint8_t blehid_db_data[]=
         LEGATTDB_PERM_READABLE
     ),
 
-   // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
+    // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
     // Value modified shall be retained during connection and across connection // for bonded devices
-   CHAR_DESCRIPTOR_UUID16_WRITABLE
+    CHAR_DESCRIPTOR_UUID16_WRITABLE
     (
         HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_BITMAP_CHAR_CFG_DESCR,
         GATT_UUID_CHAR_CLIENT_CONFIG,
         LEGATTDB_PERM_READABLE|LEGATTDB_PERM_WRITE_CMD|LEGATTDB_PERM_WRITE_REQ
     ),
 
-   // Handle 0x67: report reference
-   CHAR_DESCRIPTOR_UUID16
+    // Handle 0x67: report reference
+    CHAR_DESCRIPTOR_UUID16
     (
         HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_BITMAP_RPT_REF_DESCR,
         GATT_UUID_RPT_REF_DESCR,
@@ -377,17 +389,17 @@ const uint8_t blehid_db_data[]=
         LEGATTDB_PERM_READABLE
     ),
 
-   // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
+    // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
     // Value modified shall be retained during connection and across connection // for bonded devices
-   CHAR_DESCRIPTOR_UUID16_WRITABLE
+    CHAR_DESCRIPTOR_UUID16_WRITABLE
     (
         HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_SLEEP_CHAR_CFG_DESCR,
         GATT_UUID_CHAR_CLIENT_CONFIG,
         LEGATTDB_PERM_READABLE|LEGATTDB_PERM_WRITE_CMD|LEGATTDB_PERM_WRITE_REQ
     ),
 
-   // Handle 0x6B: report reference
-   CHAR_DESCRIPTOR_UUID16
+    // Handle 0x6B: report reference
+    CHAR_DESCRIPTOR_UUID16
     (
         HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_SLEEP_RPT_REF_DESCR,
         GATT_UUID_RPT_REF_DESCR,
@@ -405,17 +417,17 @@ const uint8_t blehid_db_data[]=
         LEGATTDB_PERM_READABLE
     ),
 
-   // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
+    // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
     // Value modified shall be retained during connection and across connection // for bonded devices
-   CHAR_DESCRIPTOR_UUID16_WRITABLE
+    CHAR_DESCRIPTOR_UUID16_WRITABLE
     (
         HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_FUNC_LOCK_CHAR_CFG_DESCR,
         GATT_UUID_CHAR_CLIENT_CONFIG,
         LEGATTDB_PERM_READABLE|LEGATTDB_PERM_WRITE_CMD|LEGATTDB_PERM_WRITE_REQ
     ),
 
-   // Handle 0x6F: report reference
-   CHAR_DESCRIPTOR_UUID16
+    // Handle 0x6F: report reference
+    CHAR_DESCRIPTOR_UUID16
     (
         HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_FUNC_LOCK_RPT_REF_DESCR,
         GATT_UUID_RPT_REF_DESCR,
@@ -433,17 +445,17 @@ const uint8_t blehid_db_data[]=
         LEGATTDB_PERM_READABLE
     ),
 
-   // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
+    // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
     // Value modified shall be retained during connection and across connection // for bonded devices
-   CHAR_DESCRIPTOR_UUID16_WRITABLE
+    CHAR_DESCRIPTOR_UUID16_WRITABLE
     (
         HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_SCROLL_CHAR_CFG_DESCR,
         GATT_UUID_CHAR_CLIENT_CONFIG,
         LEGATTDB_PERM_READABLE|LEGATTDB_PERM_WRITE_CMD|LEGATTDB_PERM_WRITE_REQ
     ),
 
-   // Handle 0x73: report reference
-   CHAR_DESCRIPTOR_UUID16
+    // Handle 0x73: report reference
+    CHAR_DESCRIPTOR_UUID16
     (
         HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_SCROLL_RPT_REF_DESCR,
         GATT_UUID_RPT_REF_DESCR,
@@ -462,8 +474,8 @@ const uint8_t blehid_db_data[]=
         LEGATTDB_PERM_READABLE|LEGATTDB_PERM_WRITE_REQ
     ),
 
-   // Handle 0x76: report reference
-   CHAR_DESCRIPTOR_UUID16
+    // Handle 0x76: report reference
+    CHAR_DESCRIPTOR_UUID16
     (
         HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_CONNECTION_CTRL_RPT_REF_DESCR,
         GATT_UUID_RPT_REF_DESCR,
@@ -485,11 +497,11 @@ const uint8_t blehid_db_data[]=
 #ifdef OTA_SECURE_FIRMWARE_UPGRADE
     // Handle 0xff00: Cypress vendor specific WICED Secure OTA Upgrade Service.
     PRIMARY_SERVICE_UUID128
-        (HANDLE_OTA_FW_UPGRADE_SERVICE, UUID_OTA_SEC_FW_UPGRADE_SERVICE),
+    ( HANDLE_OTA_FW_UPGRADE_SERVICE, UUID_OTA_SEC_FW_UPGRADE_SERVICE ),
 #else
     // Handle 0xff00: Cypress vendor specific WICED OTA Upgrade Service.
     PRIMARY_SERVICE_UUID128
-        ( HANDLE_OTA_FW_UPGRADE_SERVICE, UUID_OTA_FW_UPGRADE_SERVICE ),
+    ( HANDLE_OTA_FW_UPGRADE_SERVICE, UUID_OTA_FW_UPGRADE_SERVICE ),
 #endif
 
     // Handles 0xff03: characteristic WS Control Point, handle 0xff04 characteristic value.
@@ -686,6 +698,14 @@ const uint8_t blehid_rpt_map[] =
   ****************************************************************************/
 const attribute_t blehid_gattAttributes[] =
 {
+#if INCLUDE_GATT_SERVICE_CHANGED
+    {
+        HANDLE_BLEKB_GATT_SERVICE_CHANGED_VAL,
+        sizeof(hid_service_changed),
+        hid_service_changed
+    },
+#endif
+
     {
         HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_NAME_VAL,
         sizeof(dev_local_name),
@@ -753,7 +773,7 @@ const attribute_t blehid_gattAttributes[] =
     },
 
     {
-       HANDLE_BLEKB_LE_HID_SERVICE_HID_BT_KB_INPUT_CHAR_CFG_DESCR,
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_BT_KB_INPUT_CHAR_CFG_DESCR,
         2,
         &characteristic_client_configuration[0]  //bit mask: KBAPP_CLIENT_CONFIG_NOTIF_BOOT_RPT          (0x01)
     },
@@ -783,13 +803,13 @@ const attribute_t blehid_gattAttributes[] =
     },
 
     {
-       HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_INPUT_CHAR_CFG_DESCR,
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_INPUT_CHAR_CFG_DESCR,
         2,
         &characteristic_client_configuration[1]  //bit mask: KBAPP_CLIENT_CONFIG_NOTIF_STD_RPT           (0x02)
     },
 
     {
-       HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_INPUT_RPT_REF_DESCR,
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_INPUT_RPT_REF_DESCR,
         2,
         rpt_ref_std_key_input   //fixed
     },
@@ -801,7 +821,7 @@ const attribute_t blehid_gattAttributes[] =
     },
 
     {
-       HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_OUTPUT_RPT_REF_DESCR,
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_OUTPUT_RPT_REF_DESCR,
         2,
         rpt_ref_std_key_output  //fixed
     },
@@ -831,13 +851,13 @@ const attribute_t blehid_gattAttributes[] =
     },
 
     {
-       HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_SLEEP_CHAR_CFG_DESCR,
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_SLEEP_CHAR_CFG_DESCR,
         2,
         &characteristic_client_configuration[3]  //bit mask: KBAPP_CLIENT_CONFIG_NOTIF_SLP_RPT           (0x08)
     },
 
     {
-       HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_SLEEP_RPT_REF_DESCR,
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_SLEEP_RPT_REF_DESCR,
         2,
         rpt_ref_sleep   //fixed
     },
@@ -849,13 +869,13 @@ const attribute_t blehid_gattAttributes[] =
     },
 
     {
-       HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_FUNC_LOCK_CHAR_CFG_DESCR,
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_FUNC_LOCK_CHAR_CFG_DESCR,
         2,
         &characteristic_client_configuration[4]  //bit mask: KBAPP_CLIENT_CONFIG_NOTIF_FUNC_LOCK_RPT     (0x10)
     },
 
     {
-       HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_FUNC_LOCK_RPT_REF_DESCR,
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_FUNC_LOCK_RPT_REF_DESCR,
         2,
         rpt_ref_func_lock   //fixed
     },
@@ -867,13 +887,13 @@ const attribute_t blehid_gattAttributes[] =
     },
 
     {
-       HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_SCROLL_CHAR_CFG_DESCR,
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_SCROLL_CHAR_CFG_DESCR,
         2,
         &characteristic_client_configuration[6]  //bit mask: KBAPP_CLIENT_CONFIG_NOTIF_SCROLL_RPT        (0x40)
     },
 
     {
-       HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_SCROLL_RPT_REF_DESCR,
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_SCROLL_RPT_REF_DESCR,
         2,
         rpt_ref_scroll  //fixed
     },
@@ -885,7 +905,7 @@ const attribute_t blehid_gattAttributes[] =
     },
 
     {
-       HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_CONNECTION_CTRL_RPT_REF_DESCR,
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_CONNECTION_CTRL_RPT_REF_DESCR,
         2,
         rpt_ref_connection_ctrl //fixed
     },
@@ -897,34 +917,38 @@ const uint16_t blehid_gattAttributes_size = sizeof(blehid_gattAttributes)/sizeof
 * Keyboard application configuration. Defines behavior of the keyboard
 * application
 *****************************************************************************/
+#define USE_KEYSCAN_KEY_TO_PAIR 1
 KbAppConfig kbAppConfig =
 {
     // Standard report ID
-    1,
+    STD_KB_REPORT_ID,
 
     // Maximum number of keys in standard report
     KEYRPT_MAX_KEYS_IN_STD_REPORT,
 
     // Report ID of bit mapped report
-    2,
+    BITMAPPED_REPORT_ID,
 
     // Number of bit mapped keys
-    18,
+    BIT_MAPPED_MAX,
 
     // Sleep report ID
-    4,
+    SLEEP_REPORT_ID,
 
     // Pin report ID
-    0xff,
+    NOT_USED_REPORT_ID,
 
     // LED (output) reportID
-    1,
+    LED_OUTPUT_REPORT_ID,
 
     // Default LED state is all off
     0,
-
-    // Connect button scan index:
-    69,
+#if USE_KEYSCAN_KEY_TO_PAIR
+    94, // index 94 -- lock key
+#else
+    // Connect button scan index: for using one key_matrix key. Use 0xFF since we are using GPIO button.
+    0xff, // 69
+#endif
 
     // Recovery poll count
     3,
@@ -939,13 +963,13 @@ KbAppConfig kbAppConfig =
     3,
 
     // Func lock report ID
-    5,
+    FUNC_LOCK_REPORT_ID,
 
     // Default state of the func-lock key
     0,
 
     // Scroll report ID
-    6,
+    SCROLL_REPORT_ID,
 
     // Scroll report length
     1,
@@ -979,185 +1003,185 @@ KbAppConfig kbAppConfig =
 *****************************************************************************/
 KbKeyConfig kbKeyConfig[] =
 {
-    // Column 0:  order is row0 ->row7
-    {KEY_TYPE_STD,              20},  //#0, Q
-    {KEY_TYPE_STD,              43},  //#1, Tab
-    {KEY_TYPE_STD,               4},  //#2, A
-    {KEY_TYPE_BIT_MAPPED,        3},  //#3, WWW Home
-    {KEY_TYPE_STD,              29},  //#4, Z
-    {KEY_TYPE_NONE,              0},  //#5, Reserved
-    {KEY_TYPE_STD,              53},  //#6, ` ~
-    {KEY_TYPE_STD,              30},  //#7, 1 !
+// Column 0:  row0 ->row7
+/*   0 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*   1 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*   2 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*   3 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*   4 */ {KEY_TYPE_BIT_MAPPED, BIT_MAPPED_RGB},
+/*   5 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*   6 */ {KEY_TYPE_BIT_MAPPED, BIT_MAPPED_FUNCTION},
+/*   7 */ {FN_KEY_TYPE,         FN5_KEYCODE},
 
-    // Column 1: order is row0 ->row7
-    {KEY_TYPE_STD,              26},  //#8,  W
-    {KEY_TYPE_STD,              57},  //#9,  Caps Lock
-    {KEY_TYPE_STD,              22},  //#10, S
-    {KEY_TYPE_STD,              100}, //#11, K45.
-    {KEY_TYPE_STD,              27},  //#12, X
-    {KEY_TYPE_NONE,              0},  //#13, Reserved
-    {KEY_TYPE_BIT_MAPPED,        5},  //#14, lock
-    {KEY_TYPE_STD,              31},  //#15, 2 @
+// Column 1: order is row0 ->row7
+/*   8 */ {KEY_TYPE_STD,        USB_USAGE_Q},
+/*   9 */ {KEY_TYPE_STD,        USB_USAGE_TAB},
+/*  10 */ {KEY_TYPE_STD,        USB_USAGE_A},
+/*  11 */ {KEY_TYPE_STD,        USB_USAGE_ESCAPE},
+/*  12 */ {KEY_TYPE_STD,        USB_USAGE_Z},
+/*  13 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  14 */ {KEY_TYPE_STD,        USB_USAGE_ACCENT},
+/*  15 */ {KEY_TYPE_STD,        USB_USAGE_1},
 
-    // Column 2: order is row0 ->row7
-    {KEY_TYPE_STD,              8},   //#16, E
-    {KEY_TYPE_BIT_MAPPED,       6},   //#17, WWW Search
-    {KEY_TYPE_STD,              7},   //#18, D
-    {KEY_TYPE_BIT_MAPPED,       9},   //#19, lang???
-    {KEY_TYPE_STD,              6},   //#20, C
-    {KEY_TYPE_BIT_MAPPED,       13},  //#21, eject???
-    {KEY_TYPE_BIT_MAPPED,       8},   //#22 siri???
-    {KEY_TYPE_STD,              32},  //#23, 3 #
+// Column 2: order is row0 ->row7
+/*  16 */ {KEY_TYPE_STD,        USB_USAGE_W},
+/*  17 */ {KEY_TYPE_STD,        USB_USAGE_CAPS_LOCK},
+/*  18 */ {KEY_TYPE_STD,        USB_USAGE_S},
+/*  19 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  20 */ {KEY_TYPE_STD,        USB_USAGE_X},
+/*  21 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  22 */ {FN_KEY_TYPE,         FN1_KEYCODE},
+/*  23 */ {KEY_TYPE_STD,        USB_USAGE_2},
 
-    // Column 3: order is row0 ->row7
-    {KEY_TYPE_STD,              21},  //#24, R
-    {KEY_TYPE_STD,              23},  //#25, T
-    {KEY_TYPE_STD,              9},   //#26, F
-    {KEY_TYPE_STD,              10},  //#27, G
-    {KEY_TYPE_STD,              25},  //#28, V
-    {KEY_TYPE_STD,              5},   //#29, B
-    {KEY_TYPE_STD,              34},  //#30, 5 %
-    {KEY_TYPE_STD,              33},  //#31, 4 $
+// Column 3: order is row0 ->row7
+/*  24 */ {KEY_TYPE_STD,        USB_USAGE_E},
+/*  25 */ {FN_KEY_TYPE,         FN3_KEYCODE},
+/*  26 */ {KEY_TYPE_STD,        USB_USAGE_D},
+/*  27 */ {FN_KEY_TYPE,         FN4_KEYCODE},
+/*  28 */ {KEY_TYPE_STD,        USB_USAGE_C},
+/*  29 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  30 */ {FN_KEY_TYPE,         FN2_KEYCODE},
+/*  31 */ {KEY_TYPE_STD,        USB_USAGE_3},
 
-    // Column 4: order is row0 ->row7
-    {KEY_TYPE_STD,              24},  //#32, U
-    {KEY_TYPE_STD,              28},  //#33, Y
-    {KEY_TYPE_STD,              13},  //#34, J
-    {KEY_TYPE_STD,              11},  //#35, H
-    {KEY_TYPE_STD,              16},  //#36, M
-    {KEY_TYPE_STD,              17},  //#37, N
-    {KEY_TYPE_STD,              35},  //#38, 6 &
-    {KEY_TYPE_STD,              36},  //#39, 7 /
+// Column 4: order is row0 ->row7
+/*  32 */ {KEY_TYPE_STD,        USB_USAGE_R},
+/*  33 */ {KEY_TYPE_STD,        USB_USAGE_T},
+/*  34 */ {KEY_TYPE_STD,        USB_USAGE_F},
+/*  35 */ {KEY_TYPE_STD,        USB_USAGE_G},
+/*  36 */ {KEY_TYPE_STD,        USB_USAGE_V},
+/*  37 */ {KEY_TYPE_STD,        USB_USAGE_B},
+/*  38 */ {KEY_TYPE_STD,        USB_USAGE_5},
+/*  39 */ {KEY_TYPE_STD,        USB_USAGE_4},
 
-    // Column 5: order is row0 ->row7
-    {KEY_TYPE_STD,              12},  //#40, I
-    {KEY_TYPE_STD,              48},  //#41, ] }
-    {KEY_TYPE_STD,              14},  //#42, K
-    {KEY_TYPE_BIT_MAPPED,       11},  //#43, Previous track
-    {KEY_TYPE_STD,              54},  //#44, , <
-    {KEY_TYPE_NONE,             0},   //#45, Reserved
-    {KEY_TYPE_STD,              46},  //#46, = +
-    {KEY_TYPE_STD,              37},  //#47, 8 *
+// Column 5: order is row0 ->row7
+/*  40 */ {KEY_TYPE_STD,        USB_USAGE_U},
+/*  41 */ {KEY_TYPE_STD,        USB_USAGE_Y},
+/*  42 */ {KEY_TYPE_STD,        USB_USAGE_J},
+/*  43 */ {KEY_TYPE_STD,        USB_USAGE_H},
+/*  44 */ {KEY_TYPE_STD,        USB_USAGE_M},
+/*  45 */ {KEY_TYPE_STD,        USB_USAGE_N},
+/*  46 */ {KEY_TYPE_STD,        USB_USAGE_6},
+/*  47 */ {KEY_TYPE_STD,        USB_USAGE_7},
 
-    // Column 6: order is row0 ->row7
-    {KEY_TYPE_STD,              18},  //#48, O
-    {KEY_TYPE_BIT_MAPPED,       14},  //#49, Play/Pause
-    {KEY_TYPE_STD,              15},  //#50, L
-    {KEY_TYPE_NONE,             0},   //#51, Reserved
-    {KEY_TYPE_STD,              55},  //#52, . >
-    {KEY_TYPE_STD,              44},  //#53, Space
-    {KEY_TYPE_BIT_MAPPED,       12},  //#54,  Next track
-    {KEY_TYPE_STD,              38},  //#55, 9 (
+// Column 6: order is row0 ->row7
+/*  48 */ {KEY_TYPE_STD,        USB_USAGE_I},
+/*  49 */ {KEY_TYPE_STD,        USB_USAGE_RIGHT_BRACKET},
+/*  50 */ {KEY_TYPE_STD,        USB_USAGE_K},
+/*  51 */ {FN_KEY_TYPE,         FN6_KEYCODE},
+/*  52 */ {KEY_TYPE_STD,        USB_USAGE_COMMA},
+/*  53 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  54 */ {KEY_TYPE_STD,        USB_USAGE_EQUAL},
+/*  55 */ {KEY_TYPE_STD,        USB_USAGE_8},
 
-    // Column 7: order is row0 ->row7
-    {KEY_TYPE_STD,              19},  //#56, P
-    {KEY_TYPE_STD,              47},  //#57, [ {
-    {KEY_TYPE_STD,              51},  //#58, ; :
-    {KEY_TYPE_STD,              52},  //#59, ' "
-    {KEY_TYPE_STD,              42},  //#60, Back Space
-    {KEY_TYPE_STD,              56},  //#61, / ?
-    {KEY_TYPE_STD,              45},  //#62, - _
-    {KEY_TYPE_STD,              39},  //#63, 0 )
+// Column 7: order is row0 ->row7
+/*  56 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  57 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  58 */ {MD_KEY_TYPE,         MD_LEFT_CTL},
+/*  59 */ {MD_KEY_TYPE,         MD_LEFT_GUI},
+/*  60 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  61 */ {KEY_TYPE_BIT_MAPPED, BIT_MAPPED_LIGHT},
+/*  62 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  63 */ {KEY_TYPE_STD,        USB_USAGE_VOL_UP},
 
-    // Column 8: order is row0 ->row7
-    {KEY_TYPE_NONE,              0},  //#64, Reserved
-    {KEY_TYPE_NONE,              0},  //#65, Reserved
-    {KEY_TYPE_STD,              49},  //#66, \ |
-    {KEY_TYPE_BIT_MAPPED,       15},  //#67, Volume up
-    {KEY_TYPE_STD,              40},  //#68, Enter
-    {KEY_TYPE_NONE,              0},  //#69, Pairing/Connect button
-    {KEY_TYPE_BIT_MAPPED,       17},  //#70, Mute
-    {KEY_TYPE_BIT_MAPPED,       16},  //#71, Volume down
+// Column 8: order is row0 ->row7
+/*  64 */ {KEY_TYPE_STD,        USB_USAGE_P},
+/*  65 */ {KEY_TYPE_STD,        USB_USAGE_LEFT_BRACKET},
+/*  66 */ {KEY_TYPE_STD,        USB_USAGE_SEMICOLON},
+/*  67 */ {KEY_TYPE_STD,        USB_USAGE_QUOTE},
+/*  68 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  69 */ {KEY_TYPE_STD,        USB_USAGE_SLASH},
+/*  70 */ {KEY_TYPE_STD,        USB_USAGE_MINUS},
+/*  71 */ {KEY_TYPE_STD,        USB_USAGE_0},
 
-    // Column 9: order is row0 ->row7
-    {KEY_TYPE_STD,              82},  //#72, Up Arrow
-    {KEY_TYPE_NONE,              0},  //#73, Reserved
-    {KEY_TYPE_NONE,              0},  //#74, Reserved
-    {KEY_TYPE_STD,              80},  //#75, Left Arrow
-    {KEY_TYPE_NONE,              0},  //#76, Reserved
-    {KEY_TYPE_STD,              79},  //#77, Right Arrow
-    {KEY_TYPE_STD,              81},  //#78, Down Arrow
-    {KEY_TYPE_BIT_MAPPED,        0},  //#79, power
+// Column 9: order is row0 ->row7
+/*  72 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  73 */ {KEY_TYPE_STD,        USB_USAGE_BACKSPACE},
+/*  74 */ {KEY_TYPE_STD,        USB_USAGE_BACK_SLASH},
+/*  75 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  76 */ {KEY_TYPE_STD,        USB_USAGE_ENTER},
+/*  77 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  78 */ {FN_KEY_TYPE,         FN9_KEYCODE},
+/*  79 */ {KEY_TYPE_STD,        FN10_KEYCODE},  // both F10 or MUTE keys are STD KEY
 
-    // Column 10: order is row0 ->row7
-    {KEY_TYPE_NONE,              0},  //#80, Reserved
-    {KEY_TYPE_NONE,              0},  //#81, Reserved
-    {KEY_TYPE_NONE,              0},  //#82, Reserved
-    {KEY_TYPE_MODIFIER,          8},  //#83, Win_L
-    {KEY_TYPE_NONE,              0},  //#84, Reserved
-    {KEY_TYPE_MODIFIER,        128},  //#85, Win_R
-    {KEY_TYPE_NONE,              0},  //#86, Reserved
-    {KEY_TYPE_NONE,              0},  //#87, Reserved
+// Column 10: order is row0 ->row7
+/*  80 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  81 */ {MD_KEY_TYPE,         MD_LEFT_SHIFT},
+/*  82 */ {MD_KEY_TYPE,         MD_RIGHT_SHIFT},
+/*  83 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  84 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  85 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  86 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  87 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
 
-    // Column 11: order is row0 ->row7
-    {KEY_TYPE_NONE,              0},  //#88, Reserved
-    {KEY_TYPE_NONE,              0},  //#89, Reserved
-    {KEY_TYPE_NONE,              0},  //#90, Reserved
-    {KEY_TYPE_NONE,              0},  //#91, Reserved
-    {KEY_TYPE_MODIFIER,         64},  //#92, ALT_R
-    {KEY_TYPE_NONE,              0},  //#93, Reserved
-    {KEY_TYPE_MODIFIER,         16},  //#94, Fn
-    {KEY_TYPE_NONE,              0},  //#95, Reserved
+// Column 11: order is row0 ->row7
+/*  88 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  89 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  90 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  91 */ {KEY_TYPE_STD,        USB_USAGE_SPACEBAR},
+/*  92 */ {KEY_TYPE_STD,        USB_USAGE_VOL_DOWN},
+/*  93 */ {KEY_TYPE_STD,        USB_USAGE_DOWN_ARROW},
+/*  94 */ {KEY_TYPE_STD,        USB_USAGE_SCROLL_LOCK},
+/*  95 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
 
-    // Column 12: order is row0 ->row7
-    {KEY_TYPE_NONE,              0},  //#96, Reserved
-    {KEY_TYPE_MODIFIER,          2},  //#97, Shift_L
-    {KEY_TYPE_MODIFIER,         32},  //#98, Shift_R
-    {KEY_TYPE_NONE,              0},  //#99, Reserved
-    {KEY_TYPE_NONE,              0},  //#100, Reserved
-    {KEY_TYPE_NONE,              0},  //#101, Reserved
-    {KEY_TYPE_NONE,              0},  //#102, Reserved
-    {KEY_TYPE_NONE,              0},  //#103, Reserved
+// Column 12: order is row0 ->row7
+/*  96 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  97 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  98 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/*  99 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 100 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 101 */ {KEY_TYPE_STD,        USB_USAGE_RIGHT_ARROW},
+/* 102 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 103 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
 
-    // Column 13: order is row0 ->row7
-    {KEY_TYPE_NONE,              0},  //#104, Reserved
-    {KEY_TYPE_MODIFIER,          4},  //#105, ALT_L
-    {KEY_TYPE_NONE,              0},  //#106, Reserved
-    {KEY_TYPE_NONE,              0},  //#107, Reserved
-    {KEY_TYPE_NONE,              0},  //#108, Reserved
-    {KEY_TYPE_NONE,              0},  //#109, Reserved
-    {KEY_TYPE_NONE,              0},  //#110, Reserved
-    {KEY_TYPE_NONE,              0},  //#111, Reserved
+// Column 13: order is row0 ->row7
+/* 104 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 105 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 106 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 107 */ {KEY_TYPE_STD,        USB_USAGE_UP_ARROW},
+/* 108 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 109 */ {KEY_TYPE_STD,        USB_USAGE_LEFT_ARROW},
+/* 110 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 111 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
 
-    // Column 14: order is row0 ->row7
-    {KEY_TYPE_NONE,              0},  //#112, Reserved
-    {KEY_TYPE_NONE,              0},  //#113, Reserved
-    {KEY_TYPE_NONE,              0},  //#114, Reserved
-    {KEY_TYPE_NONE,              0},  //#115, Reserved
-    {KEY_TYPE_NONE,              0},  //#116, Reserved
-    {KEY_TYPE_NONE,              0},  //#117, Reserved
-    {KEY_TYPE_NONE,              0},  //#118, Reserved
-    {KEY_TYPE_MODIFIER,          1},  //#119, Ctrl_L
+// Column 14: order is row0 ->row7
+/* 112 */ {KEY_TYPE_STD,        USB_USAGE_O},
+/* 113 */ {FN_KEY_TYPE,         FN7_KEYCODE},
+/* 114 */ {KEY_TYPE_STD,        USB_USAGE_L},
+/* 115 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 116 */ {KEY_TYPE_STD,        USB_USAGE_STOP_AND_GREATER},
+/* 117 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 118 */ {FN_KEY_TYPE,         FN8_KEYCODE},
+/* 119 */ {KEY_TYPE_STD,        USB_USAGE_9},
 
-    // Column 15: order is row0 ->row7
-    {KEY_TYPE_NONE,              0},  //#120, Reserved
-    {KEY_TYPE_NONE,              0},  //#121, Reserved
-    {KEY_TYPE_NONE,              0},  //#122, Reserved
-    {KEY_TYPE_NONE,              0},  //#123, Reserved
-    {KEY_TYPE_NONE,              0},  //#124, Reserved
-    {KEY_TYPE_NONE,              0},  //#125, Reserved
-    {KEY_TYPE_NONE,              0},  //#126, Reserved
-    {KEY_TYPE_NONE,              0},  //#127, Reserved
+// Column 15: order is row0 ->row7
+/* 120 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 121 */ {MD_KEY_TYPE,         MD_LEFT_ALT},
+/* 122 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 123 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 124 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 125 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 126 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 127 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
 
-    // Column 16: order is row0 ->row7
-    {KEY_TYPE_NONE,              0},  //#128, Reserved
-    {KEY_TYPE_NONE,              0},  //#129, Reserved
-    {KEY_TYPE_NONE,              0},  //#130, Reserved
-    {KEY_TYPE_NONE,              0},  //#131, Reserved
-    {KEY_TYPE_NONE,              0},  //#132, Reserved
-    {KEY_TYPE_NONE,              0},  //#133, Reserved
-    {KEY_TYPE_NONE,              0},  //#134, Reserved
-    {KEY_TYPE_NONE,              0},  //#135, Reserved
+// Column 16: order is row0 ->row7
+/* 128 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 129 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 130 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 131 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 132 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 133 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 134 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 135 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
 
-    // Column 17: order is row0 ->row7
-    {KEY_TYPE_NONE,              0},  //#136, Reserved
-    {KEY_TYPE_NONE,              0},  //#137, Reserved
-    {KEY_TYPE_NONE,              0},  //#138, Reserved
-    {KEY_TYPE_NONE,              0},  //#139, Reserved
-    {KEY_TYPE_NONE,              0},  //#140, Reserved
-    {KEY_TYPE_NONE,              0},  //#141, Reserved
-    {KEY_TYPE_NONE,              0},  //#142, Reserved
-    {KEY_TYPE_NONE,              0},  //#143, Reserved
+// Column 17: order is row0 ->row7
+/* 136 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 137 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 138 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 139 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 140 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 141 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 142 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
+/* 143 */ {KEY_TYPE_NONE,       USB_USAGE_NO_EVENT},
 
 };
 
@@ -1168,152 +1192,163 @@ const uint8_t kbKeyConfig_size = sizeof(kbKeyConfig)/sizeof(KbKeyConfig);
  ****************************************************************************/
 const wiced_bt_cfg_settings_t wiced_bt_hid_cfg_settings =
 {
-    (uint8_t *)dev_local_name,                                      /**< Local device name (NULL terminated) */
-    {0x00, 0x05, 0xc0},                                             /**< Local device class */
-    BTM_SEC_ENCRYPT,                                                /**< Security requirements mask (BTM_SEC_NONE, or combinination of BTM_SEC_IN_AUTHENTICATE, BTM_SEC_OUT_AUTHENTICATE, BTM_SEC_ENCRYPT (see #wiced_bt_sec_level_e)) */
-    1,                                                              /**< Maximum number simultaneous links to different devices */
+    .device_name                         = (uint8_t*)dev_local_name,                                   /**< Local device name (NULL terminated) */
+    .device_class                        = {0x00, 0x05, 0xc0},                                         /**< Local device class */
+    .security_requirement_mask           = BTM_SEC_ENCRYPT,                                            /**< Security requirements mask (BTM_SEC_NONE, or combinination of BTM_SEC_IN_AUTHENTICATE, BTM_SEC_OUT_AUTHENTICATE, BTM_SEC_ENCRYPT (see #wiced_bt_sec_level_e)) */
 
+    .max_simultaneous_links              = 1,                                                          /**< Maximum number simultaneous links to different devices */
 
-    /* BR/EDR scan config */
+    .br_edr_scan_cfg =                                              /* BR/EDR scan config */
     {
-        BTM_SCAN_TYPE_STANDARD,                                     /**< Inquiry scan type (BTM_SCAN_TYPE_STANDARD or BTM_SCAN_TYPE_INTERLACED) */
-        WICED_BT_CFG_DEFAULT_INQUIRY_SCAN_INTERVAL,                 /**< Inquiry scan interval  (0 to use default) */
-        WICED_BT_CFG_DEFAULT_INQUIRY_SCAN_WINDOW,                   /**< Inquiry scan window (0 to use default) */
+        .inquiry_scan_type               = BTM_SCAN_TYPE_STANDARD,                                     /**< Inquiry scan type (BTM_SCAN_TYPE_STANDARD or BTM_SCAN_TYPE_INTERLACED) */
+        .inquiry_scan_interval           = WICED_BT_CFG_DEFAULT_INQUIRY_SCAN_INTERVAL,                 /**< Inquiry scan interval  (0 to use default) */
+        .inquiry_scan_window             = WICED_BT_CFG_DEFAULT_INQUIRY_SCAN_WINDOW,                   /**< Inquiry scan window (0 to use default) */
 
-        BTM_SCAN_TYPE_STANDARD,                                     /**< Page scan type (BTM_SCAN_TYPE_STANDARD or BTM_SCAN_TYPE_INTERLACED) */
-        WICED_BT_CFG_DEFAULT_PAGE_SCAN_INTERVAL,                    /**< Page scan interval  (0 to use default) */
-        WICED_BT_CFG_DEFAULT_PAGE_SCAN_WINDOW                       /**< Page scan window (0 to use default) */
+        .page_scan_type                  = BTM_SCAN_TYPE_STANDARD,                                     /**< Page scan type (BTM_SCAN_TYPE_STANDARD or BTM_SCAN_TYPE_INTERLACED) */
+        .page_scan_interval              = WICED_BT_CFG_DEFAULT_PAGE_SCAN_INTERVAL,                    /**< Page scan interval  (0 to use default) */
+        .page_scan_window                = WICED_BT_CFG_DEFAULT_PAGE_SCAN_WINDOW                       /**< Page scan window (0 to use default) */
     },
 
-    /* BLE scan settings  */
+    .ble_scan_cfg =                                                 /* BLE scan settings  */
     {
-        BTM_BLE_SCAN_MODE_PASSIVE,                                  /**< BLE scan mode (BTM_BLE_SCAN_MODE_PASSIVE, BTM_BLE_SCAN_MODE_ACTIVE, or BTM_BLE_SCAN_MODE_NONE) */
+        .scan_mode                       = BTM_BLE_SCAN_MODE_PASSIVE,                                  /**< BLE scan mode (BTM_BLE_SCAN_MODE_PASSIVE, BTM_BLE_SCAN_MODE_ACTIVE, or BTM_BLE_SCAN_MODE_NONE) */
 
-        WICED_BT_CFG_DEFAULT_HIGH_DUTY_SCAN_INTERVAL,               /**< High duty scan interval */
-        WICED_BT_CFG_DEFAULT_HIGH_DUTY_SCAN_WINDOW,                 /**< High duty scan window */
-        5,                                                          /**< High duty scan duration in seconds (0 for infinite) */
+        /* Advertisement scan configuration */
+        .high_duty_scan_interval         = WICED_BT_CFG_DEFAULT_HIGH_DUTY_SCAN_INTERVAL,               /**< High duty scan interval */
+        .high_duty_scan_window           = WICED_BT_CFG_DEFAULT_HIGH_DUTY_SCAN_WINDOW,                 /**< High duty scan window */
+        .high_duty_scan_duration         = 5,                                                          /**< High duty scan duration in seconds (0 for infinite) */
 
-        WICED_BT_CFG_DEFAULT_LOW_DUTY_SCAN_INTERVAL,                /**< Low duty scan interval  */
-        WICED_BT_CFG_DEFAULT_LOW_DUTY_SCAN_WINDOW,                  /**< Low duty scan window */
-        5,                                                          /**< Low duty scan duration in seconds (0 for infinite) */
+        .low_duty_scan_interval          = WICED_BT_CFG_DEFAULT_LOW_DUTY_SCAN_INTERVAL,                /**< Low duty scan interval  */
+        .low_duty_scan_window            = WICED_BT_CFG_DEFAULT_LOW_DUTY_SCAN_WINDOW,                  /**< Low duty scan window */
+        .low_duty_scan_duration          = 5,                                                          /**< Low duty scan duration in seconds (0 for infinite) */
 
-        /* Connection scan intervals */
-        WICED_BT_CFG_DEFAULT_HIGH_DUTY_CONN_SCAN_INTERVAL,          /**< High duty cycle connection scan interval */
-        WICED_BT_CFG_DEFAULT_HIGH_DUTY_CONN_SCAN_WINDOW,            /**< High duty cycle connection scan window */
-        30,                                                         /**< High duty cycle connection duration in seconds (0 for infinite) */
+        /* Connection scan configuration */
+        .high_duty_conn_scan_interval    = WICED_BT_CFG_DEFAULT_HIGH_DUTY_CONN_SCAN_INTERVAL,          /**< High duty cycle connection scan interval */
+        .high_duty_conn_scan_window      = WICED_BT_CFG_DEFAULT_HIGH_DUTY_CONN_SCAN_WINDOW,            /**< High duty cycle connection scan window */
+        .high_duty_conn_duration         = 30,                                                         /**< High duty cycle connection duration in seconds (0 for infinite) */
 
-        WICED_BT_CFG_DEFAULT_LOW_DUTY_CONN_SCAN_INTERVAL,           /**< Low duty cycle connection scan interval */
-        WICED_BT_CFG_DEFAULT_LOW_DUTY_CONN_SCAN_WINDOW,             /**< Low duty cycle connection scan window */
-        30,                                                         /**< Low duty cycle connection duration in seconds (0 for infinite) */
+        .low_duty_conn_scan_interval     = WICED_BT_CFG_DEFAULT_LOW_DUTY_CONN_SCAN_INTERVAL,           /**< Low duty cycle connection scan interval */
+        .low_duty_conn_scan_window       = WICED_BT_CFG_DEFAULT_LOW_DUTY_CONN_SCAN_WINDOW,             /**< Low duty cycle connection scan window */
+        .low_duty_conn_duration          = 30,                                                         /**< Low duty cycle connection duration in seconds (0 for infinite) */
 
         /* Connection configuration */
-        18,                                                         /**< Minimum connection interval */
-        18,                                                         /**< Maximum connection interval */
-        21,                                                         /**< Connection latency */
-        600                                                         /**< Connection link supervsion timeout */
+        .conn_min_interval               = 18,                                                         /**< Minimum connection interval */
+        .conn_max_interval               = 18,                                                         /**< Maximum connection interval */
+        .conn_latency                    = 21,                          /**< Connection latency */
+        .conn_supervision_timeout        = 600,                                                        /**< Connection link supervision timeout */
     },
 
-    /* BLE advertisement settings */
+    .ble_advert_cfg =                                               /* BLE advertisement settings */
     {
-        BTM_BLE_ADVERT_CHNL_37 |                                    /**< Advertising channel map (mask of BTM_BLE_ADVERT_CHNL_37, BTM_BLE_ADVERT_CHNL_38, BTM_BLE_ADVERT_CHNL_39) */
-        BTM_BLE_ADVERT_CHNL_38 |
-        BTM_BLE_ADVERT_CHNL_39,
+        .channel_map                     = BTM_BLE_ADVERT_CHNL_37 |                                    /**< Advertising channel map (mask of BTM_BLE_ADVERT_CHNL_37, BTM_BLE_ADVERT_CHNL_38, BTM_BLE_ADVERT_CHNL_39) */
+                                           BTM_BLE_ADVERT_CHNL_38 |
+                                           BTM_BLE_ADVERT_CHNL_39,
 
-        32,                                                         /**< High duty undirected connectable minimum advertising interval. 32 *0.625 = 20ms */
-        32,                                                         /**< High duty undirected connectable maximum advertising interval. 32 *0.625 = 20ms */
+        .high_duty_min_interval          = 32,                                                         /**< High duty undirected connectable minimum advertising interval */
+        .high_duty_max_interval          = 32,                                                         /**< High duty undirected connectable maximum advertising interval */
 #ifdef ALLOW_SDS_IN_DISCOVERABLE
-        0,                                                          /**< High duty undirected connectable advertising duration in seconds (0 for infinite) */
+        .high_duty_duration              = 0,                                                          /**< High duty undirected connectable advertising duration in seconds (0 for infinite) */
 #else
-        30,                                                         /**< High duty undirected connectable advertising duration in seconds (0 for infinite) */
+        .high_duty_duration              = 30,                                                         /**< High duty undirected connectable advertising duration in seconds (0 for infinite) */
 #endif
-        48,                                                         /**< Low duty undirected connectable minimum advertising interval. 48 *0.625 = 30ms */
-        48,                                                         /**< Low duty undirected connectable maximum advertising interval */
+        .low_duty_min_interval           = 48,             /**< Low duty undirected connectable minimum advertising interval */
+        .low_duty_max_interval           = 48,             /**< Low duty undirected connectable maximum advertising interval */
 #ifdef ALLOW_SDS_IN_DISCOVERABLE
-        0,                                                          /**< Low duty undirected connectable advertising duration in seconds (0 for infinite) */
+        .low_duty_duration               = 0,                                                          /**< Low duty undirected connectable advertising duration in seconds (0 for infinite) */
 #else
-        180,                                                        /**< Low duty undirected connectable advertising duration in seconds (0 for infinite) */
+        .low_duty_duration               = 180,                                                        /**< Low duty undirected connectable advertising duration in seconds (0 for infinite) */
 #endif
-        32,                                                         /**< High duty directed connectable minimum advertising interval. 32 *0.625 = 20ms */
-        32,                                                         /**< High duty directed connectable maximum advertising interval. 32 *0.625 = 20ms */
+        .high_duty_directed_min_interval = 32,                                                         /**< High duty directed connectable minimum advertising interval */
+        .high_duty_directed_max_interval = 32,                                                         /**< High duty directed connectable maximum advertising interval */
 
-        2048,                                                       /**< Low duty directed connectable minimum advertising interval. 2048 * 0.625ms = 1.28 seconds */
-        2048,                                                       /**< Low duty directed connectable maximum advertising interval. 2048 * 0.625ms = 1.28 seconds */
-        0,                                                         /**< Low duty directed connectable advertising duration in seconds (0 for infinite) */
+        .low_duty_directed_min_interval  = 2048,                                                       /**< Low duty directed connectable minimum advertising interval */
+        .low_duty_directed_max_interval  = 2048,                                                       /**< Low duty directed connectable maximum advertising interval */
+        .low_duty_directed_duration      = 0,                                                          /**< Low duty directed connectable advertising duration in seconds (0 for infinite) */
 
-        WICED_BT_CFG_DEFAULT_HIGH_DUTY_NONCONN_ADV_MIN_INTERVAL,    /**< High duty non-connectable minimum advertising interval */
-        WICED_BT_CFG_DEFAULT_HIGH_DUTY_NONCONN_ADV_MAX_INTERVAL,    /**< High duty non-connectable maximum advertising interval */
-        30,                                                         /**< High duty non-connectable advertising duration in seconds (0 for infinite) */
+        .high_duty_nonconn_min_interval  = WICED_BT_CFG_DEFAULT_HIGH_DUTY_NONCONN_ADV_MIN_INTERVAL,    /**< High duty non-connectable minimum advertising interval */
+        .high_duty_nonconn_max_interval  = WICED_BT_CFG_DEFAULT_HIGH_DUTY_NONCONN_ADV_MAX_INTERVAL,    /**< High duty non-connectable maximum advertising interval */
+        .high_duty_nonconn_duration      = 30,                                                         /**< High duty non-connectable advertising duration in seconds (0 for infinite) */
 
-        WICED_BT_CFG_DEFAULT_LOW_DUTY_NONCONN_ADV_MIN_INTERVAL,     /**< Low duty non-connectable minimum advertising interval */
-        WICED_BT_CFG_DEFAULT_LOW_DUTY_NONCONN_ADV_MAX_INTERVAL,     /**< Low duty non-connectable maximum advertising interval */
-        0                                                           /**< Low duty non-connectable advertising duration in seconds (0 for infinite) */
+        .low_duty_nonconn_min_interval   = WICED_BT_CFG_DEFAULT_LOW_DUTY_NONCONN_ADV_MIN_INTERVAL,     /**< Low duty non-connectable minimum advertising interval */
+        .low_duty_nonconn_max_interval   = WICED_BT_CFG_DEFAULT_LOW_DUTY_NONCONN_ADV_MAX_INTERVAL,     /**< Low duty non-connectable maximum advertising interval */
+        .low_duty_nonconn_duration       = 0                                                           /**< Low duty non-connectable advertising duration in seconds (0 for infinite) */
     },
 
-    /* GATT configuration */
+    .gatt_cfg =                                                     /* GATT configuration */
     {
-        APPEARANCE_GENERIC_TAG,                                     /**< GATT appearance (see gatt_appearance_e) */
-        1,                                                          /**< Client config: maximum number of servers that local client can connect to  */
-        1,                                                          /**< Server config: maximum number of remote clients connections allowed by the local */
-        512,                                                        /**< Maximum attribute length; gki_cfg must have a corresponding buffer pool that can hold this length */
-        517                                                         /**< Maximum MTU size for GATT connections, should be between 23 and (max_attr_len + 5 )*/
+        .appearance                     = APPEARANCE_GENERIC_TAG,                                      /**< GATT appearance (see gatt_appearance_e) */
+        .client_max_links               = 1,                                                           /**< Client config: maximum number of servers that local client can connect to  */
+        .server_max_links               = 1,                                                           /**< Server config: maximum number of remote clients connections allowed by the local */
+        .max_attr_len                   = 180,                                                         /**< Maximum attribute length; gki_cfg must have a corresponding buffer pool that can hold this length */
+#if !defined(CYW20706A2)
+        .max_mtu_size                   = 185                                                           /**< Maximum MTU size for GATT connections, should be between 23 and (max_attr_len + 5) */
+#endif
     },
 
-    /* RFCOMM configuration */
+    .rfcomm_cfg =                                                   /* RFCOMM configuration */
     {
-        0,                                                          /**< Maximum number of simultaneous connected remote devices*/
-        0                                                           /**< Maximum number of simultaneous RFCOMM ports */
+        .max_links                      = 0,                                                           /**< Maximum number of simultaneous connected remote devices*/
+        .max_ports                      = 0                                                            /**< Maximum number of simultaneous RFCOMM ports */
     },
 
-    /* Application managed l2cap protocol configuration */
+    .l2cap_application =                                            /* Application managed l2cap protocol configuration */
     {
-        0,                                                          /**< Maximum number of application-managed l2cap links (BR/EDR and LE) */
+        .max_links                      = 0,                                                           /**< Maximum number of application-managed l2cap links (BR/EDR and LE) */
 
         /* BR EDR l2cap configuration */
-        0,                                                          /**< Maximum number of application-managed BR/EDR PSMs */
-        0,                                                          /**< Maximum number of application-managed BR/EDR channels  */
+        .max_psm                        = 0,                                                           /**< Maximum number of application-managed BR/EDR PSMs */
+        .max_channels                   = 0,                                                           /**< Maximum number of application-managed BR/EDR channels  */
 
         /* LE L2cap connection-oriented channels configuration */
-        0,                                                          /**< Maximum number of application-managed LE PSMs */
-        0,                                                          /**< Maximum number of application-managed LE channels */
-
+        .max_le_psm                     = 0,                                                           /**< Maximum number of application-managed LE PSMs */
+        .max_le_channels                = 0,                                                           /**< Maximum number of application-managed LE channels */
+#if !defined(CYW20706A2)
         /* LE L2cap fixed channel configuration */
-        0                                                           /**< Maximum number of application managed fixed channels supported (in addition to mandatory channels 4, 5 and 6). > */
+        .max_le_l2cap_fixed_channels    = 0                                                            /**< Maximum number of application managed fixed channels supported (in addition to mandatory channels 4, 5 and 6). > */
+#endif
     },
 
-
+    .avdt_cfg =
     /* Audio/Video Distribution configuration */
     {
-        0,                                                          /**< Maximum simultaneous audio/video links */
-        0                                                           /**< Maximum number of stream end points */
+        .max_links                      = 0,                                                           /**< Maximum simultaneous audio/video links */
+#if !defined(CYW20706A2)
+        .max_seps                       = 0                                                            /**< Maximum number of stream end points */
+#endif
     },
 
-    /* Audio/Video Remote Control configuration */
+    .avrc_cfg =                                                     /* Audio/Video Remote Control configuration */
     {
-        0,                                                          /**< Mask of local roles supported (AVRC_CONN_INITIATOR|AVRC_CONN_ACCEPTOR) */
-        0                                                           /**< Maximum simultaneous remote control links */
+        .roles                          = 0,                                                           /**< Mask of local roles supported (AVRC_CONN_INITIATOR|AVRC_CONN_ACCEPTOR) */
+        .max_links                      = 0                                                            /**< Maximum simultaneous remote control links */
     },
 
     /* LE Address Resolution DB size  */
-    5,                                                              /**< LE Address Resolution DB settings - effective only for pre 4.2 controller*/
+    .addr_resolution_db_size            = 5,                                                           /**< LE Address Resolution DB settings - effective only for pre 4.2 controller*/
 
-
+#ifdef CYW20706A2
+    .max_mtu_size                       = 185,                                                         /**< Maximum MTU size for GATT connections, should be between 23 and (max_attr_len + 5) */
+    .max_pwr_db_val                     = 12                                                           /**< Max. power level of the device */
+#else
     /* Maximum number of buffer pools */
-    4,                                                              /**< Maximum number of buffer pools in p_btm_cfg_buf_pools and by wiced_create_pool */
-
+    .max_number_of_buffer_pools         = 4,                                                           /**< Maximum number of buffer pools in p_btm_cfg_buf_pools and by wiced_create_pool */
 
     /* Interval of  random address refreshing */
 #ifdef LE_LOCAL_PRIVACY_SUPPORT
-    WICED_BT_CFG_DEFAULT_RANDOM_ADDRESS_CHANGE_TIMEOUT,              /**< Interval of  random address refreshing - secs */
+    .rpa_refresh_timeout                = WICED_BT_CFG_DEFAULT_RANDOM_ADDRESS_CHANGE_TIMEOUT,          /**< Interval of  random address refreshing - secs */
 #else
-    WICED_BT_CFG_DEFAULT_RANDOM_ADDRESS_NEVER_CHANGE,                /**< Interval of  random address refreshing - secs */
+    .rpa_refresh_timeout                = WICED_BT_CFG_DEFAULT_RANDOM_ADDRESS_NEVER_CHANGE,            /**< Interval of  random address refreshing - secs */
+#endif
+    /* BLE white list size */
+    .ble_white_list_size                = 0,                                                           /**< Maximum number of white list devices allowed. Cannot be more than 128 */
 #endif
 
-#if defined(CYW20735B1) || defined(CYW20819A1)
-    /* BLE white list size */
-    0,                                                               /**< Maximum number of white list devices allowed. Cannot be more than 128 */
+#if defined(CYW20719B2) || defined(CYW20721B2) || defined(CYW20819A1) || defined (CYW20820A1)
+    .default_ble_power_level            = 0                                                            /**< Default LE power level, Refer lm_TxPwrTable table for the power range */
 #endif
 };
-/*****************************************************************************5
+
+/*****************************************************************************
  * wiced_bt_stack buffer pool configuration
  *
  * Configure buffer pools used by the stack
@@ -1324,8 +1359,8 @@ const wiced_bt_cfg_settings_t wiced_bt_hid_cfg_settings =
 const wiced_bt_cfg_buf_pool_t wiced_bt_hid_cfg_buf_pools[WICED_BT_CFG_NUM_BUF_POOLS] =
 {
 /*  { buf_size, buf_count } */
-    { 64,       4   },      /* Small Buffer Pool */
-    { 360,      28   },      /* Medium Buffer Pool (used for HCI & RFCOMM control messages, min recommended size is 360) */
-    { 1024,      8  },      /* Large Buffer Pool  (used for HCI ACL messages) */
-    { 1024,      2   },      /* Extra Large Buffer Pool - Used for avdt media packets and miscellaneous (if not needed, set buf_count to 0) */
+    { 64,       20        }, /* Small Buffer Pool */
+    { 100,      30        }, /* Medium Buffer Pool (used for HCI & RFCOMM control messages, min recommended size is 360) */
+    { 330,      8         }, /* Large Buffer Pool  (used for HCI ACL messages) */
+    { 1024,     2         }, /* Extra Large Buffer Pool - Used for avdt media packets and miscellaneous (if not needed, set buf_count to 0) */
 };

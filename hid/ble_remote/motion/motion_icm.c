@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -154,7 +154,7 @@ void CMotionSensorICM_setMode(MotionSensorICM_mode_t m)
     wiced_stop_timer(&idle_timer);
     if (m == SENSOR_ENABLED)
     {
-        WICED_BT_TRACE("mMode Active\n");
+        WICED_BT_TRACE("\nmMode Active");
         CMotionSensorICM_initialize();
         CMotionSensorICM_initializeSensor();
         ICM20608_StartMotionDetection();
@@ -162,7 +162,7 @@ void CMotionSensorICM_setMode(MotionSensorICM_mode_t m)
     }
     else
     {
-        WICED_BT_TRACE("mMode Inactive\n");
+        WICED_BT_TRACE("\nmMode Inactive");
         motionSensorPtr->disableInterrupt();
         ICM20608_GYRO_Stop();
         ICM20608_ACC_Stop();
@@ -198,8 +198,8 @@ void CMotionSensorICM_pollSensorData()
     //Poll ICM-20608 motion sensor activity
     ICM20608_GYRO_GetSample((int16_t *)&(icm20608Samples.GyroSamples));
     ICM20608_ACC_GetSample((int16_t *) &(icm20608Samples.AccSamples));
-//WICED_BT_TRACE("g x=%d y=%d ", icm20608Samples.GyroSamples.X, icm20608Samples.GyroSamples.Y);
-//WICED_BT_TRACE("a x=%d y=%d\n", icm20608Samples.AccSamples.X, icm20608Samples.AccSamples.Y);
+//WICED_BT_TRACE("\ng x=%d y=%d ", icm20608Samples.GyroSamples.X, icm20608Samples.GyroSamples.Y);
+//WICED_BT_TRACE("\na x=%d y=%d", icm20608Samples.AccSamples.X, icm20608Samples.AccSamples.Y);
 #ifdef USE_MOTION_AS_AIR_MOUSE
     icm20608Samples.GyroSamples.X ^= 0xFFFF;
     icm20608Samples.GyroSamples.Y ^= 0xFFFF;
@@ -292,7 +292,7 @@ void CMotionSensorICM_registerForInterrupt(void (*userfn)(void*, uint8_t), void 
 #ifdef USE_MOTION_AS_AIR_MOUSE
 void CMotionSensorICM_setClickState(uint8_t s)
 {
-    WICED_BT_TRACE("m:click%d\n",s);
+    WICED_BT_TRACE("\nm:click%d",s);
     newMouseClickState = s;
 }
 #endif
@@ -301,13 +301,13 @@ void idleTimerCb( uint32_t arg)
 {
     if (active)
     {
-        WICED_BT_TRACE("motion active, restart timer\n");
+        WICED_BT_TRACE("\nmotion active, restart timer");
         // was still active, wait one more round.
         wiced_start_timer(&idle_timer, MOTION_IDLE_TIMEOUT_mS);
     }
     else
     {
-        WICED_BT_TRACE("motion idle\n");
+        WICED_BT_TRACE("\nmotion idle");
         idleTimerOn = FALSE;
 #ifdef POLL_MOTION_WHILE_CONNECTED_AND_ACTIVE
         // when active we disable interrupt and use poll,
@@ -345,7 +345,7 @@ uint8_t CMotionSensorICM_pollActivity(HidEventUserDefine * eventPtr)
     // poll for new sensor data
     CMotionSensorICM_pollSensorData();
 
-//WICED_BT_TRACE("\ndx=%d dy=%d\n", deltaX, deltaY);
+//WICED_BT_TRACE("\ndx=%d dy=%d", deltaX, deltaY);
     // we generate report only if there is delta X/Y change or mouse click change
 #ifdef USE_MOTION_AS_AIR_MOUSE
     if (deltaX || deltaY || (oldMouseClickState != newMouseClickState))
@@ -379,7 +379,7 @@ uint8_t CMotionSensorICM_pollActivity(HidEventUserDefine * eventPtr)
         }
         if (!idleTimerOn)
         {
-            WICED_BT_TRACE("start motion idle timer\n");
+            WICED_BT_TRACE("\nstart motion idle timer");
             wiced_start_timer(&idle_timer, MOTION_IDLE_TIMEOUT_mS);
             idleTimerOn = TRUE;
         }
@@ -447,7 +447,7 @@ MotionSensorICM_c motionSensor = {
 ////////////////////////////////////////////////////////////////////////////////
 MotionSensorICM_c * CMotionSensorICM_CMotionSensorICM(void (*userfn)(void*, uint8_t), void * objPtr, uint8_t gpio, uint8_t activeLogic, uint16_t config)
 {
-    WICED_BT_TRACE("CMotion Cstr\n");
+    WICED_BT_TRACE("\nCMotion Cstr");
 
     wiced_hal_i2c_init(); //enable I2C clock
     wiced_hal_i2c_set_speed(I2CM_SPEED_400KHZ);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -45,7 +45,9 @@
 
 #include "wiced_hidd_lib.h"
 #include "blehidlink.h"
-#include "blehostlist.h"
+#include "wiced_platform.h"
+#include "GeneratedSource/cycfg_pins.h"
+#include "hidd_lib.h"
 
 #define MOUSE_REPORT_ID     2
 #define BATTERY_REPORT_ID   3
@@ -59,8 +61,28 @@
 #define MOUSEAPP_CLIENT_CONFIG_NOTIF_BATTERY_RPT    (0x04)
 #define MOUSEAPP_CLIENT_CONFIG_NOTIF_NONE           (0)
 
+#define P_LED_IDX     0
+#define P_L_CLICK_IDX WICED_PLATFORM_BUTTON_1  // EVB02 - sw3 button, mimic mouse left click. For actual mouse, we don't have GPIO button (using key-matrix instead)
+#ifdef MOUSE_PLATFORM
+ #define P_MOTION_IDX  WICED_PLATFORM_GPIO_1   // Use P17 for motion int
+#else
+ #define P_MOTION_IDX  WICED_PLATFORM_GPIO_8   // Use P13 (A5 for EVB02)
+#endif
+
+#define P_LED       WICED_GET_PIN_FOR_LED(P_LED_IDX)
+#define P_L_CLICK   WICED_GET_PIN_FOR_BUTTON(P_L_CLICK_IDX)
+#define P_MOTION    WICED_GET_PIN_FOR_IO(P_MOTION_IDX)
+#define LED_OFF_LEVEL 1
 
 #pragma pack(1)
+
+enum {
+    NO_BUTTON_BIT    = 0x0000,
+    LEFT_BUTTON_BIT  = 0x0001,
+    RIGHT_BUTTON_BIT = 0x0002,
+    MID_BUTTON_BIT   = 0x0004,
+    PAIR_BUTTON_BIT  = 0x8000,
+};
 
 /// Mouse App config
 typedef PACKED struct
@@ -210,14 +232,6 @@ enum
 };
 
 
-/// Connect button state
-typedef enum
-{
-    CONNECT_BUTTON_UP,
-    CONNECT_BUTTON_DOWN
-}ConnectButtonPosition;
-
-
 void blemouseapp_create(void);
 void mouseapp_init(void);
 void mouseapp_shutdown(void);
@@ -239,7 +253,6 @@ void mouseapp_createAndTxReportModeReport(void);
 void mouseapp_createAndTxReport(void);
 void mouseapp_txReportSet(void);
 void mouseapp_pollActivityButton(void);
-void mouseapp_connectButtonHandler(ConnectButtonPosition connectButtonPosition);
 void mouseapp_connectButtonPressed(void);
 void mouseapp_clientConfWriteBatteryRpt(wiced_hidd_report_type_t reportType,
                                      uint8_t reportId,
@@ -328,13 +341,12 @@ typedef struct
 
     uint8_t motion_fifo_in;
 
-    uint8_t keyInterrupt_On;
-    uint8_t allowSDS;
-
 } tMouseAppState;
 
 extern const uint8_t blehid_db_data[];
 extern const uint16_t blehid_db_size;
+extern const attribute_t blehid_gattAttributes[];
+extern const uint16_t blehid_gattAttributes_size;
 extern const wiced_bt_cfg_settings_t wiced_bt_hid_cfg_settings;
 extern const wiced_bt_cfg_buf_pool_t wiced_bt_hid_cfg_buf_pools[];
 extern uint8_t blemouse_input_rpt[];

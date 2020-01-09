@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -44,11 +44,15 @@
 #define _BLEKB_H_
 
 #include "wiced_hidd_lib.h"
+#include "wiced_platform.h"
+#include "GeneratedSource/cycfg_pins.h"
 #include "blehidlink.h"
-#include "blehostlist.h"
+#include "hidd_lib.h"
 
 extern const uint8_t blehid_db_data[];
 extern const uint16_t blehid_db_size;
+extern const attribute_t blehid_gattAttributes[];
+extern const uint16_t blehid_gattAttributes_size;
 extern const wiced_bt_cfg_settings_t wiced_bt_hid_cfg_settings;
 extern const wiced_bt_cfg_buf_pool_t wiced_bt_hid_cfg_buf_pools[];
 extern uint16_t blehostlist_flags;
@@ -57,23 +61,24 @@ extern uint8_t blekb_bitmap_rpt[];
 extern uint8_t blekb_func_lock_rpt;
 
 /// Maximum number of keys supported by our HID
-//#define KB_MAX_KEYS 144     // 8x18=144 ( 8x20 = 160 max )
-#define KB_MAX_KEYS 56     // 7x8=56 ( 8x20 = 160 max )
+#define KB_MAX_KEYS 144     // 8x18=144 ( 8x20 = 160 max )
 
 #define KB_MAX_FUNC_LOCK_DEP_KEYS 24
 
 /*******************************************************************************
 * Types and Defines
 *******************************************************************************/
-#define NUM_KEYSCAN_ROWS    7    // Num of Rows in keyscan matrix
-#define NUM_KEYSCAN_COLS    8    // Num of Cols in keyscan matrix
+#define NUM_KEYSCAN_ROWS    8    // Num of Rows in keyscan matrix
+#define NUM_KEYSCAN_COLS    18   // Num of Cols in keyscan matrix
 
 #define STD_KB_REPORT_ID            1
+#define LED_OUTPUT_REPORT_ID        1
 #define BITMAPPED_REPORT_ID         2
 #define BATTERY_REPORT_ID           3
 #define SLEEP_REPORT_ID             4
 #define FUNC_LOCK_REPORT_ID         5
 #define SCROLL_REPORT_ID            6
+#define NOT_USED_REPORT_ID          0xff
 
 
 /// Maximum number of keys in a standard key report. Technically the report is
@@ -110,16 +115,38 @@ extern uint8_t blekb_func_lock_rpt;
 
 #define KBAPP_CLIENT_CONFIG_NOTIF_NONE              (0)
 
-#ifdef LED_USE_PWM
-#define BLEKB_PWM_LED1 28
-#define BLEKB_PWM_LED2 29
-#define BLEKB_PWM_LED_BASE 26
-#define BLEKB_PWM_STEPS 500 //max 0x3ff=1023
+#define PAIR_BUTTON_IDX     WICED_PLATFORM_BUTTON_1
+#define LED_CAPS            WICED_GET_PIN_FOR_LED(WICED_PLATFORM_LED_1)
+#define LED_BLUE            WICED_GET_PIN_FOR_LED(WICED_PLATFORM_LED_2)
+#ifdef KEYBOARD_PLATFORM
+ #define LED_GREEN          WICED_GET_PIN_FOR_LED(WICED_PLATFORM_LED_3)
+ #define LED_RED            WICED_GET_PIN_FOR_LED(WICED_PLATFORM_LED_4)
 #else
-#define BLEKB_LED_CAPS 26
-#define BLEKB_LED_BLUE 27
-#define BLEKB_LED_GREEN 28
-#define BLEKB_LED_RED 29
+ #define PAIR_BUTTON         WICED_GET_PIN_FOR_BUTTON(PAIR_BUTTON_IDX)
+#endif
+#define DEBUG_TRIGGER       WICED_GET_PIN_FOR_IO(WICED_PLATFORM_GPIO_1)
+#define DEBUG_DATA          WICED_GET_PIN_FOR_IO(WICED_PLATFORM_GPIO_2)
+#define DEBUG_CLK           WICED_GET_PIN_FOR_IO(WICED_PLATFORM_GPIO_3)
+#define LED_OFF_LEVEL 1          // voltage high to turn off LED
+
+#ifdef LED_USE_PWM
+ #define kb_LED_init(p,i)  wiced_hidd_pwm_led_init(p,i)
+ #define kb_LED_on(p)      wiced_hidd_pwm_led_on(p,100)
+ #define kb_LED_off(p)     wiced_hidd_pwm_led_off(p)
+#else
+ #define kb_LED_init(p,i)  wiced_hidd_led_init(p,i)
+ #define kb_LED_on(p)      wiced_hidd_led_on(p)
+ #define kb_LED_off(p)     wiced_hidd_led_off(p)
+#endif
+
+#ifdef KEYBOARD_PLATFORM
+ #define KB_LED_ERROR            LED_RED
+ #define KB_LED_LE_LINK          LED_BLUE
+ #define KB_LED_ERBDR_LINK       LED_GREEN
+#else
+ #define KB_LED_ERROR            LED_BLUE
+ #define KB_LED_LE_LINK          LED_BLUE
+ #define KB_LED_ERBDR_LINK       LED_BLUE
 #endif
 
 #pragma pack(1)
@@ -687,6 +714,71 @@ typedef struct
     uint8_t toggleStateOnKeyUp;
 }FuncLockInfo;
 
+enum
+{
+    BIT_MAPPED_POWER,           // 0
+    BIT_MAPPED_LOCK,            // 1
+    BIT_MAPPED_LIGHT,           // 2
+    BIT_MAPPED_RGB,             // 3
+    BIT_MAPPED_WORLD,           // 4
+    BIT_MAPPED_EDIT,            // 5
+    BIT_MAPPED_COPY,            // 6
+    BIT_MAPPED_SEARCH,          // 7
+    BIT_MAPPED_BACKLIGHT,       // 8
+    BIT_MAPPED_LIGHT_UP,        // 9
+    BIT_MAPPED_LIGHT_DOWN,      // 10
+    BIT_MAPPED_REWIND,          // 11
+    BIT_MAPPED_FAST_FORWARD,    // 12
+    BIT_MAPPED_FUNCTION,        // 13
+    BIT_MAPPED_PLAY_PAUSE,      // 14
+    BIT_MAPPED_MAX
+};
+
+#define USE_MODIFIER 1
+#if USE_MODIFIER
+ #define MD_KEY_TYPE    KEY_TYPE_MODIFIER
+ #define MD_LEFT_SHIFT  USB_MODKEY_MASK_LEFT_SHIFT
+ #define MD_LEFT_ALT    USB_MODKEY_MASK_LEFT_ALT
+ #define MD_LEFT_CTL    USB_MODKEY_MASK_LEFT_CTL
+ #define MD_LEFT_GUI    USB_MODKEY_MASK_LEFT_GUI
+ #define MD_RIGHT_SHIFT USB_MODKEY_MASK_RIGHT_SHIFT
+#else
+ #define MD_KEY_TYPE  KEY_TYPE_STD
+ #define MD_LEFT_SHIFT  USB_USAGE_LEFT_SHIFT
+ #define MD_LEFT_ALT    USB_USAGE_LEFT_ALT
+ #define MD_LEFT_CTL    USB_USAGE_LEFT_CTL
+ #define MD_LEFT_GUI    USB_USAGE_LEFT_GUI
+ #define MD_RIGHT_SHIFT USB_USAGE_RIGHT_SHIFT
+#endif
+
+#define USE_FUNCTION_KEYS 0
+#if USE_FUNCTION_KEYS
+ #define FN_KEY_TYPE KEY_TYPE_STD
+ #define FN1_KEYCODE USB_USAGE_F1
+ #define FN2_KEYCODE USB_USAGE_F2
+ #define FN3_KEYCODE USB_USAGE_F3
+ #define FN4_KEYCODE USB_USAGE_F4
+ #define FN5_KEYCODE USB_USAGE_F5
+ #define FN6_KEYCODE USB_USAGE_F6
+ #define FN7_KEYCODE USB_USAGE_F7
+ #define FN8_KEYCODE USB_USAGE_F8
+ #define FN9_KEYCODE USB_USAGE_F9
+ #define FN10_KEYCODE USB_USAGE_F10
+#else
+ #define FN_KEY_TYPE KEY_TYPE_BIT_MAPPED
+ #define FN1_KEYCODE BIT_MAPPED_LIGHT_DOWN
+ #define FN2_KEYCODE BIT_MAPPED_LIGHT_UP
+ #define FN3_KEYCODE BIT_MAPPED_EDIT
+ #define FN4_KEYCODE BIT_MAPPED_SEARCH
+ #define FN5_KEYCODE BIT_MAPPED_COPY
+ #define FN6_KEYCODE BIT_MAPPED_EDIT
+ #define FN7_KEYCODE BIT_MAPPED_REWIND
+ #define FN8_KEYCODE BIT_MAPPED_PLAY_PAUSE
+ #define FN9_KEYCODE BIT_MAPPED_FAST_FORWARD
+ #define FN10_KEYCODE USB_USAGE_MUTE
+#endif
+
+
 /// Connect button state
 typedef enum
 {
@@ -904,9 +996,7 @@ typedef struct
     wiced_hidd_app_event_queue_t eventQueue;
 
     uint8_t pollSeqn;
-    uint8_t keyInterrupt_On;
 
-    uint8_t allowSDS;
 } tKbAppState;
 
 #endif

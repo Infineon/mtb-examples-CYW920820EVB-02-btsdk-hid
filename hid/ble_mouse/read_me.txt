@@ -27,7 +27,7 @@ Features demonstrated
 Instructions
 -------------
 To demonstrate the app, walk through the following steps.
-1. Plug the CYW920819EVB_02 board or 20819A1 mouse HW into your computer
+1. Plug in the WICED board or mouse HW into your computer
 2. Put on jumper to bypass Serial Flash (i.e. jumper on J5 in CYW920819EVB_02 board), then power up the board or mouse HW.
 3. Remove the jumper so that download procedure below can write to Serial Flash.
 4. Build and download the application (to the EVAL board or the mouse HW)

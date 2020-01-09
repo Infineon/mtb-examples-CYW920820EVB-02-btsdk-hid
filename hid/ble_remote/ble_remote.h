@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -54,12 +54,13 @@
 #endif
 #include "wiced_hidd_micaudio.h"
 #include "wiced_hidd_lib.h"
-#include "blehidlink.h"
-#include "blehostlist.h"
+#include "hidd_lib.h"
 #include "wiced_platform.h"
 
 extern const uint8_t blehid_db_data[];
 extern const uint16_t blehid_db_size;
+extern const attribute_t blehid_gattAttributes[];
+extern const uint16_t blehid_gattAttributes_size;
 extern const wiced_bt_cfg_buf_pool_t wiced_bt_hid_cfg_buf_pools[];
 extern const wiced_bt_cfg_settings_t wiced_bt_hid_cfg_settings;
 extern wiced_bt_device_link_keys_t  blehostlist_link_keys;
@@ -80,6 +81,7 @@ extern uint8_t bleremote_bitmap_rpt[];
 #define BITMAPPED_REPORT_ID         2
 #define BATTERY_REPORT_ID           3
 #define RPT_ID_MOUSE                8
+#define MEDIA_REPORT_ID           0xa
 #define RPT_ID_IN_ABS_XY         0x20
 #define RPT_ID_VOICE_CTL         0xF8
 #define MOTION_REPORT_ID         RPT_ID_MOUSE

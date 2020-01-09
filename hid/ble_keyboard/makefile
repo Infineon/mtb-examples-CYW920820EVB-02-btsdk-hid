@@ -1,5 +1,5 @@
 #
-# Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+# Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
 # Cypress Semiconductor Corporation. All Rights Reserved.
 #
 # This software, including source code, documentation and related
@@ -48,11 +48,13 @@ TARGET=CYW920820EVB-02
 
 SUPPORTED_TARGETS = \
   CYW920819EVB-02 \
-  CYW920820EVB-02
+  CYW920820EVB-02 \
+#  CYW920819REF-KB-01
 
 TARGET_DEVICE_MAP = \
   CYW920819EVB-02/20819A1 \
-  CYW920820EVB-02/20820A1
+  CYW920820EVB-02/20820A1 \
+#  CYW920819REF-KB-01/20819A1
 
 CY_TARGET_DEVICE = $(patsubst $(TARGET)/%,%,$(filter $(TARGET)%,$(TARGET_DEVICE_MAP)))
 
@@ -111,13 +113,28 @@ CY_APP_PATCH_LIBS += wiced_hidd_lib.a
 # received LE conn param update complete event with non-preferred values
 #
 # defaults if not overridden on the command line:
-TESTING_USING_HCI_DEFAULT=0
+
+ifeq ($(TARGET), CYW920819REF-KB-01)
+ TESTING_USING_HCI_DEFAULT=0
+else
+ TESTING_USING_HCI_DEFAULT=1
+endif
 OTA_FW_UPGRADE_DEFAULT=1
 OTA_SEC_FW_UPGRADE_DEFAULT=0
 ASSYMETRIC_SLAVE_LATENCY_DEFAULT=0
 LE_LOCAL_PRIVACY_DEFAULT=0
 SKIP_PARAM_UPDATE_DEFAULT=1
 AUTO_RECONNECT_DEFAULT=0
+# SLEEP_ALLOWED
+#  SLEEP_ALLOWED_DEFAULT=0  Disable sleep function
+#  SLEEP_ALLOWED_DEFAULT=1  Allow sleep without shutdown
+#  SLEEP_ALLOWED_DEFAULT=2  Allow sleep with shutdown
+SLEEP_ALLOWED_DEFAULT=2
+# LED
+#  LED_DEFAULT=0  Disable LED functions (Good for power consumption measurement)
+#  LED_DEFAULT=1  Use LED for status indication
+#  LED_DEFAULT=2  Use PWM LED, allows to control brightness of LED in percentage
+LED_SUPPORT_DEFAULT=1
 
 XIP?=xip
 BT_DEVICE_ADDRESS?=default
@@ -129,13 +146,21 @@ ASSYMETRIC_SLAVE_LATENCY ?= $(ASSYMETRIC_SLAVE_LATENCY_DEFAULT)
 LE_LOCAL_PRIVACY ?= $(LE_LOCAL_PRIVACY_DEFAULT)
 SKIP_PARAM_UPDATE ?= $(SKIP_PARAM_UPDATE_DEFAULT)
 AUTO_RECONNECT ?= $(AUTO_RECONNECT_DEFAULT)
+SLEEP_ALLOWED ?= $(SLEEP_ALLOWED_DEFAULT)
+LED ?= $(LED_SUPPORT_DEFAULT)
 
 #
 # App defines
 #
 CY_APP_DEFINES = \
   -DWICED_BT_TRACE_ENABLE \
-  -DLE_HIDD_ONLY
+  -DBLE_SUPPORT \
+  -DLED_SUPPORT=$(LED) \
+  -DSLEEP_ALLOWED=$(SLEEP_ALLOWED)
+
+ifeq ($(TARGET), CYW920819REF-KB-01)
+ CY_APP_DEFINES += -DKEYBOARD_PLATFORM
+endif
 
 ifeq ($(TESTING_USING_HCI),1)
  CY_APP_DEFINES += -DTESTING_USING_HCI

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -37,11 +37,9 @@
  *
  */
 
-#include "wiced_hidd_lib.h"
-#include "wiced_bt_trace.h"
-#include "blehidhci.h"
-#include "blehidgatts.h"
 #include "ble_mouse.h"
+#include "wiced_bt_trace.h"
+#include "hidd_lib.h"
 
 #ifdef TESTING_USING_HCI
 static hci_rpt_db_t hci_rpt_db[] =
@@ -55,10 +53,16 @@ static hci_rpt_db_t hci_rpt_db[] =
  *                          Function Definitions
  ******************************************************************************/
 
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+void app_LED_init(void)
+{
+}
+
 wiced_result_t blehid_app_init(void)
 {
     /*  GATT DB Initialization  */
-    if ( blehid_gatts_init( blehid_db_data, blehid_db_size, NULL, NULL ) != WICED_BT_SUCCESS )
+    if ( wiced_hidd_gatts_init( blehid_db_data, blehid_db_size, blehid_gattAttributes, blehid_gattAttributes_size, NULL, NULL ) != WICED_BT_SUCCESS )
     {
         return WICED_BT_ERROR;
     }
@@ -75,27 +79,6 @@ wiced_result_t blehid_app_init(void)
     return WICED_BT_SUCCESS;
 }
 
-#if 0
-/*
- * Application link management callbacks
- */
-wiced_result_t blemouse_management_cback(wiced_bt_management_evt_t event, wiced_bt_management_evt_data_t *p_event_data)
-{
-    wiced_result_t result = WICED_BT_SUCCESS;
-
-    switch( event )
-    {
-        default:
-            // we didn't handle this event, let default library handler to deal with it.
-            result = WICED_NOT_FOUND;
-            break;
-    }
-    return result;
-}
-#else
- #define blemouse_management_cback NULL
-#endif
-
 /*
  *  Entry point to the application. Set device configuration and start BT
  *  stack initialization.  The actual application initialization will happen
@@ -106,42 +89,29 @@ void application_start( void )
     //restore content from AON memory when wake up from shutdown sleep (SDS)
     mouseapp_aon_restore();
 
-    wiced_ble_hidd_start("ble_mosue", blehid_app_init, blemouse_management_cback, &wiced_bt_hid_cfg_settings, wiced_bt_hid_cfg_buf_pools);
+    wiced_hidd_led_init(P_LED, LED_OFF_LEVEL);
 
-#ifdef TESTING_USING_HCI
-    WICED_BT_TRACE( "TESTING_USING_HCI.......:Yes\n");
-    hci_control_le_init(HCI_CONTROL_RPT_CNT, hci_rpt_db);
-#else
-    WICED_BT_TRACE( "TESTING_USING_HCI.......:No\n");
-#endif
+    wiced_hidd_start(blehid_app_init, NULL, &wiced_bt_hid_cfg_settings, wiced_bt_hid_cfg_buf_pools);
+    hci_control_init(HCI_CONTROL_RPT_CNT, hci_rpt_db);
+
+    WICED_BT_TRACE("\nSLEEP_ALLOWED=%d",SLEEP_ALLOWED);
 
 #ifdef SUPPORT_SCROLL
-    WICED_BT_TRACE( "ENABLE_SCROLL...........:Yes\n");
-#else
-    WICED_BT_TRACE( "ENABLE_SCROLL...........:No\n");
+    WICED_BT_TRACE("\nENABLE_SCROLL");
 #endif
 
 #ifdef SUPPORT_MOTION
-    WICED_BT_TRACE( "ENABLE_MOTION...........:Yes\n");
-#else
-    WICED_BT_TRACE( "ENABLE_MOTION...........:No\n");
+    WICED_BT_TRACE("\nENABLE_MOTION");
 #endif
 
 #ifdef OTA_FIRMWARE_UPGRADE
-    WICED_BT_TRACE( "OTA_FW_UPGRADE..........:Yes\n");
+    WICED_BT_TRACE("\nOTA_FW_UPGRADE");
  #ifdef OTA_SECURE_FIRMWARE_UPGRADE
-    WICED_BT_TRACE( "OTA_SEC_FW_UPGRADE......:Yes\n");
- #else
-    WICED_BT_TRACE( "OTA_SEC_FW_UPGRADE......:No\n");
+    WICED_BT_TRACE("\nOTA_SEC_FW_UPGRADE");
  #endif
-#else
-    WICED_BT_TRACE( "OTA_FW_UPGRADE..........:No\n");
-    WICED_BT_TRACE( "OTA_SEC_FW_UPGRADE......:No\n");
 #endif
 
 #ifdef ASSYM_SLAVE_LATENCY
-    WICED_BT_TRACE( "ASSYMETRIC_SLAVE_LATENCY:Yes\n");
-#else
-    WICED_BT_TRACE( "ASSYMETRIC_SLAVE_LATENCY:No\n");
+    WICED_BT_TRACE("\nASSYMETRIC_SLAVE_LATENCY");
 #endif
 }

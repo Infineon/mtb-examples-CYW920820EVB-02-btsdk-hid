@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -54,63 +54,13 @@
 *  - Low power management
 *  - Over the air firmware update (OTAFWU)
 *
-* To demonstrate the app, walk through the following steps.
-* 1. Plug the CYW920819EVB_02 board or 20819A1 mouse HW into your computer
-* 2. Put on jumper to bypass Serial Flash (i.e. jumper on J5 in CYW920819EVB_02 board), then power up the board or mouse HW.
-* 3. Remove the jumper so that download procedure bellowed can write to Serial Flash.
-* 4. Build and download the application (to the EVAL board or the mouse HW)
-* 5. If download failed due to not able to detecting device, just repeat step 4 again.
-* 6. Unplug the EVAL board or the mouse HW from your computer (i.e. unplug the UART cable)
-* 7. power cycle the EVAL board or the mouse HW.
-* 8. Press any button to start LE advertising, then pair with a PC or Tablet
-*    If using the CYW920819EVB board, use a fly wire to connect GPIO P0 and P8 to simulate LEFT button press,
-*     and remove the wire to simulate button release.
-* 9. Once connected, it becomes the mouse of the PC or Tablet.
-*
-*
-* In case what you have is only the WICED EVAL board, you can only use fly wire to connect to GPIOs (GPIO P0 and P8) to simulate mouse button press and release.
-* Or using the ClientControl tool in the tools to simulate button press and mouse movement.
-* 1. Plug the WICED EVAL board into your computer
-* 2. Build and download the application (to the WICED board)
-* 3. If failed to download due to device not detected, just repeat step 2 again.
-* 4. Press any button to start LE advertising, then pair with a PC or Tablet
-*     Use a fly wire to connect GPIO P0 and P8 to simulate LEFT button press,
-*     and remove the wire to simulate button release.
-* 5. Once connected, it becomes the mouse of the PC. However, you can't see scroll or mouse cursor movement
-*     since you don't have the real HW.
-
-* You can also use the WICED board and ClientControl tool test the basic BLE functions.
-* NOTE: Make sure you use "TESTING_USING_HCI=1" in application settings.
-* In ModusToolbox, select right click on app and select 'Change Application Settings'
-*
-* 1~3. same download procedure as above
-* 4. Run ClientControl.exe.
-* 5. Choose 3M as Baudrate and select the serial port in ClientControl tool window.
-* 6. Press Reset button on the board and open the port.
-* 7. Press "Enter Pairing Mode"or "Connect" to start LE advertising, then pair with a PC or Tablet
-* 8. Once connected, it becomes the mouse of the PC or Tablet.
-*  - Select Interrupt channel, Input report, enter the contents of the report
-*    and click on the Send button, to send the report.  For example:
-*    To send button down event when LEFT button is pushed, report should be
-*    02 01 00 00 00 00.  All buttons up 02 00 00 00 00 00.
-*    To send scroll up event, report should be
-*    02 00 00 00 00 ff.
-*    To send scroll down event, report should be
-*    02 00 00 00 00 01.
-*    To send mouse cursor (Y+8) event, report can be
-*    02 00 00 80 ff 00.
-*    To send mouse cursor (Y-8) event, report can be
-*    02 00 00 80 00 00.
-*    To send mouse cursor (X+8) event, report can be
-*    02 00 08 00 00 00.
-*    To send mouse cursor (X-8) event, report can be
-*    02 00 f8 0f 00 00 .
-*    Please make sure you always send a button up report following button down report.
+* See the readme for instructions.
 */
 
 #include "spar_utils.h"
 #include "gki_target.h"
-#include "wiced_bt_cfg.h"
+
+#include "wiced.h"
 #include "wiced_hal_mia.h"
 #include "wiced_hal_gpio.h"
 #include "wiced_hal_keyscan.h"
@@ -123,9 +73,11 @@
 #include "wiced_hal_pwm.h"
 #endif
 
+#include "wiced_bt_cfg.h"
 #include "wiced_bt_gatt.h"
 #include "wiced_bt_trace.h"
 #include "wiced_bt_sdp.h"
+
 #ifdef OTA_FIRMWARE_UPGRADE
 #include "wiced_bt_ota_firmware_upgrade.h"
 #endif
@@ -135,9 +87,14 @@
 
 #include "ble_mouse_gatts.h"
 #include "ble_mouse.h"
+
 #ifdef SUPPORT_MOTION
-#include "motion/PAW3805_opticalsensor.h"
+#include "motion/hidd_motion.h"
 #endif
+
+#include "hidd_lib.h"
+
+//#define MOUSE_DEBUG
 
 //////////////////////////////////////////////////////////////////////////////
 //                      local interface declaration
@@ -146,7 +103,6 @@ extern MouseAppConfig blemouseAppConfig;
 //extern QuadratureConfig quadratureConfig;
 extern uint16_t blehostlist_flags;
 extern wiced_bool_t blehidlink_connection_param_updated;
-extern UINT16 wiced_bt_buffer_poolutilization (UINT8 pool_id);
 
 tMouseAppState  ble_mouse_application_state = {0, };
 tMouseAppState *mouseAppState = &ble_mouse_application_state;
@@ -159,14 +115,7 @@ uint8_t blemouse_input_rpt[MOUSE_REPORT_SIZE] = {0, };       //map to (&(kbAppSt
 uint8_t blemouse_connection_ctrl_rpt = 0;
 
 uint8_t firstTransportStateChangeNotification = 1;
-wiced_timer_t blemouse_allow_sleep_timer;
 wiced_timer_t blemouse_conn_param_update_timer;
-
-#ifdef SUPPORT_MOTION
-wiced_bool_t motionOn = WICED_FALSE;
-
-#define MOTION_ON   (motionOn && !wiced_hidd_is_transport_detected())
-#endif
 
 wiced_blehidd_report_gatt_characteristic_t mreportModeGattMap[] =
 {
@@ -198,6 +147,24 @@ wiced_blehidd_report_gatt_characteristic_t mbootModeGattMap[] =
     //Set Protocol Mode of HID
     {0xFF     ,WICED_HID_REPORT_TYPE_OTHER   ,HANDLE_BLEMOUSE_LE_HID_SERVICE_PROTO_MODE_VAL,FALSE,mouseapp_setProtocol,MOUSEAPP_CLIENT_CONFIG_NOTIF_NONE},
 };
+
+//#ifdef MOUSE_DEBUG
+#if 1
+void _trigger(int p, int n)
+{
+    wiced_hal_gpio_configure_pin(p, GPIO_OUTPUT_ENABLE, 0);
+    wiced_hal_gpio_set_pin_output(p, 0);
+    while (n--)
+    {
+        wiced_hal_gpio_set_pin_output(p, 1);
+        wiced_hal_gpio_set_pin_output(p, 0);
+    }
+}
+
+#define trigger(n) _trigger(WICED_P05, n)
+#else
+#define trigger(n)
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 /// set up LE Advertising data
@@ -232,36 +199,11 @@ void mouseapp_setUpAdvData(void)
     wiced_bt_ble_set_raw_advertisement_data(4,  mouseapp_adv_elem);
 }
 
-
-////////////////////////////////////////////////////////////////////////////////
-/// This function is the timeout handler for allow_sleep_timer
-////////////////////////////////////////////////////////////////////////////////
-void mouseapp_allowsleep_timeout( uint32_t arg )
-{
-    WICED_BT_TRACE("allow SDS\n");
-
-#ifdef SUPPORT_MOTION
-    if (MOTION_ON && !wiced_ble_hidd_link_is_connected())
-    {
-        //flush motion data so that MOTION interrupt will be inactive
-        PAW3805_flushMotion();
-    }
-#endif
-    mouseAppState->allowSDS = WICED_TRUE;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 /// This function is the timeout handler for conn_param_update_timer
 ////////////////////////////////////////////////////////////////////////////////
 void mouseapp_connparamupdate_timeout( uint32_t arg )
 {
-#ifdef SUPPORT_MOTION
-    if (MOTION_ON)
-    {
-        PAW3805_enable_deep_sleep_mode();
-    }
-#endif
-
     //request connection param update if it not requested before
     if (!blehidlink_connection_param_updated)
     {
@@ -284,23 +226,18 @@ void mouseapp_connparamupdate_timeout( uint32_t arg )
 ////////////////////////////////////////////////////////////////////////////////
 void blemouseapp_ota_fw_upgrade_status(uint8_t status)
 {
-    WICED_BT_TRACE("OTAFU status:%d\n", status);
+    WICED_BT_TRACE("\nOTAFU status:%d", status);
 
     switch (status)
     {
     case OTA_FW_UPGRADE_STATUS_STARTED:             // Client started OTA firmware upgrade process
-        WICED_BT_TRACE("allow slave latency 0\n");
+        WICED_BT_TRACE("\nallow slave latency 0");
         wiced_blehidd_allow_slave_latency(FALSE);
         break;
 
     case OTA_FW_UPGRADE_STATUS_ABORTED:             // Aborted or failed verification */
-#ifdef SUPPORT_MOTION
-        if (!MOTION_ON)
-#endif
-        {
-            WICED_BT_TRACE("allow slave latency 1\n");
-            wiced_blehidd_allow_slave_latency(TRUE);
-        }
+        WICED_BT_TRACE("\nallow slave latency 1");
+        wiced_blehidd_allow_slave_latency(TRUE);
         break;
 
     case OTA_FW_UPGRADE_STATUS_COMPLETED:           // firmware upgrade completed, will reboot
@@ -310,19 +247,29 @@ void blemouseapp_ota_fw_upgrade_status(uint8_t status)
 }
 #endif /* OTA_FIRMWARE_UPGRADE */
 
+/* This is the pairing button interrupt handler */
+static void L_click_button_interrupt_handler( void* user_data, uint8_t pin )
+{
+    mouseapp_pollActivityButton();
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////
 /// This function will be called from blehid_app_init() during start up.
 /////////////////////////////////////////////////////////////////////////////////////////////
 void blemouseapp_create(void)
 {
-    uint16_t button_report_bits[] = {0x0001,  //1st button 'LEFT'. report bitmap 0x0001
-                                     0x0004,  //2nd button 'MID".report bitmap 0x0004
-                                     0x0002,  //3rd button 'RIGHT'. report bitmap 0x0002
-                                     0x8000}; //4th button 'PAIRING'. map it to the last button bit.
+#ifdef MOUSE_PLATFORM
+    // Three buttons: button click: p0+P8:LEFT, p0+P9:MID, p0+P10:RIGHT (no pairing keyscan button in demo hardware)
+    uint16_t button_report_bits[] = {LEFT_BUTTON_BIT,   //button 'LEFT'. report bitmap 0x0001
+                                     MID_BUTTON_BIT,    //button 'MID".report bitmap 0x0004
+                                     RIGHT_BUTTON_BIT,  //button 'RIGHT'. report bitmap 0x0002
+                                     PAIR_BUTTON_BIT};  //button 'PAIRING'. map it to the last button bit.
+    #define BUTTON_CNT (sizeof(button_report_bits)/sizeof(uint16_t))
+#endif
 
-    WICED_BT_TRACE("mouseCreate\n");
+    WICED_BT_TRACE("\nmouseCreate");
 
-    //battery monitoring configuraion
+    //battery monitoring configuraion (20819 uses P29 for 1.5V battery monitoring, it should be customized)
     wiced_hal_batmon_config(ADC_INPUT_VDDIO,    // ADC input pin
                             3000,               // Period in millisecs between battery measurements
                             8,                  // Number of measurements averaged for a report, max 16
@@ -337,43 +284,69 @@ void blemouseapp_create(void)
 #ifdef OTA_FIRMWARE_UPGRADE
     blehid_register_ota_fw_upgrade_status_callback(blemouseapp_ota_fw_upgrade_status);
 #endif
-    //button click: p0+P8:LEFT, p0+P9:MID, p0+P10:RIGHT, p0+P11:PAIRING
-    wiced_hal_keyscan_button_configure(4, WICED_FALSE, WICED_FALSE, button_report_bits);
+
+#ifdef MOUSE_PLATFORM
+    wiced_hal_keyscan_button_configure(BUTTON_CNT, WICED_FALSE, WICED_FALSE, button_report_bits);
+
     //button driver init
     wiced_hal_keyscan_button_init();
 
-#ifdef SUPPORT_SCROLL
-    //configure P29 as QOC3, P6 as qdz0, P7 as qdz1 based on HW schematics in referenced design.
+ #ifdef SUPPORT_SCROLL
+    #define USE_P26_QOC TRUE,FALSE,FALSE,FALSE
+    #define USE_P27_QOC FALSE,TRUE,FALSE,FALSE
+    #define USE_P28_QOC FALSE,FALSE,TRUE,FALSE
+    #define USE_P29_QOC FALSE,FALSE,FALSE,TRUE
+	#define USE_X_AXIS (CH_Z_DISABLE|CH_XY_ENABLE|CH_XY_SEL_LHL_PWM_RATE),WICED_TRUE,WICED_FALSE,WICED_FALSE
+	#define USE_Y_AXIS (CH_Z_DISABLE|CH_XY_ENABLE|CH_XY_SEL_LHL_PWM_RATE),WICED_FALSE,WICED_TRUE,WICED_FALSE
+    #define USE_Z_AXIS (CH_Z_ENABLE|CH_XY_DISABLE|CH_Z_SAMPLE_ONCE_PER_LHL_PWM),WICED_FALSE,WICED_FALSE,WICED_TRUE
+
     wiced_hal_quadrature_configure(QUADRATURE_LED_CONFIG_SOURCE |            //QOC_LEDs_output_polarity for QOC0 bit[1:0]
-                                   QUADRATURE_LED_CONFIG_SOURCE << 2 |       //QOC_LEDs_output_polarity for QOC2 bit[3:2]
+                                   QUADRATURE_LED_CONFIG_SOURCE << 2 |       //QOC_LEDs_output_polarity for QOC1 bit[3:2]
                                    QUADRATURE_LED_CONFIG_SOURCE << 4 |       //QOC_LEDs_output_polarity for QOC2 bit[5:4]
                                    QUADRATURE_LED_CONFIG_SOURCE << 6,        //QOC_LEDs_output_polarity for QOC3 bit[7:6]
                                    GPIO_PULL_DOWN | GPIO_EN_INT_RISING_EDGE, //quadratureInputGpioConfig
-                                   ENABLE_PORT_0_PINS_AS_QUAD_INPUT,         //port0PinsUsedAsQuadratureInput
-                                   WICED_FALSE,                              //configureP26AsQOC0
-                                   WICED_FALSE,                              //configureP27AsQOC1
-                                   WICED_FALSE,                              //configureP28AsQOC2
-                                   WICED_TRUE,                               //configureP29AsQOC3
-                                   CH_Z_ENABLE | CH_XY_DISABLE | CH_Z_SAMPLE_ONCE_PER_LHL_PWM,   //channelEnableAndSamplingRate
-                                   WICED_FALSE,                              //pollXAxis
-                                   WICED_FALSE,                              //pollYAxis
-                                   WICED_TRUE);                              //pollZAxis
+                                   ENABLE_PORT_0_PINS_AS_QUAD_INPUT,         //port0PinsUsedAsQuadratureInput (Use Port0 set)
+                                                                             //  Port0 set = P2-P7, (P2 as qdx0, P3 as qdx1, P4 as qdy0, P5 as qdy1, P6 as qdz0,P7 as qdz1)
+                                                                             //  Port2 set = P32-P37, (P32 as qdx0, P33 as qdx1, P34 as qdy0, P35 as qdy1, P36 as qdz0, P37 as qdz1)
+  #if defined(CYW20819A1)
+    // 20819 configure P28 for QOC, Y-Axis (P4,P5) based on HW schematics in referenced design.
+                                   USE_P28_QOC,
+                                   USE_Y_AXIS);
+  #else
+    // 20735 configure P29 for QOC, Z-Axis (P6,P7) based on HW schematics in referenced design.
+                                   USE_P29_QOC,
+                                   USE_Z_AXIS);
+  #endif
     //quadrature driver init
     wiced_hal_quadrature_init();
+ #endif
+#else  // EVB2 Platform
+    WICED_BT_TRACE("\nRegister p%d for left click button", P_L_CLICK);
+    wiced_platform_register_button_callback(P_L_CLICK_IDX, L_click_button_interrupt_handler, NULL, WICED_PLATFORM_BUTTON_BOTH_EDGE);
 #endif
+
 #ifdef SUPPORT_MOTION
-    //SPIFFY1 can not co-exist with UART at the same time in 20819A1
-    if (!wiced_hidd_is_transport_detected())
+ #ifdef MOUSE_PLATFORM
+    uint8_t cs = wiced_platform_get_function_gpio_pin(WICED_SPI_1_CS);
+    uint8_t clk = wiced_platform_get_function_gpio_pin(WICED_SPI_1_CLK);
+    uint8_t mosi = wiced_platform_get_function_gpio_pin(WICED_SPI_1_MOSI);
+    uint8_t miso = wiced_platform_get_function_gpio_pin(WICED_SPI_1_MISO);
+    uint32_t pinCfg = (cs << 24) | (clk << 16) |(mosi << 8) | miso;
+
+    if (cs > WICED_P39 || clk > WICED_P39 || mosi > WICED_P39 || miso > WICED_P39)
     {
-        motionOn = WICED_TRUE;
-        PAW3805_init(mouseapp_userMotionXYDetected, NULL);
+        WICED_BT_TRACE("\nError, SPI pins are not assigned");
     }
     else
     {
-        WICED_BT_TRACE("UART detected !!! disable MOTION!\n");
+        WICED_BT_TRACE("\nSPI CS/CLK/MOSI/MISO is assigned to p%d/p%d/p%d/p%d", cs,clk,mosi,miso);
     }
+ #else
+    #define pinCfg 0
+ #endif
+    motion_init(mouseapp_userMotionXYDetected, NULL, pinCfg, P_MOTION);
+    trigger(2);
 #endif
-
 
     //initialize event queue
     wiced_hidd_event_queue_init(&mouseAppState->mouseappEventQueue, (uint8_t *)wiced_memory_permanent_allocate(blemouseAppConfig.maxEventNum * blemouseAppConfig.maxEventSize),
@@ -381,7 +354,7 @@ void blemouseapp_create(void)
 
     mouseapp_init();
 
-    WICED_BT_TRACE("Free RAM bytes=%d bytes\n", wiced_memory_get_free_bytes());
+    WICED_BT_TRACE("\nFree RAM bytes=%d bytes", wiced_memory_get_free_bytes());
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -395,9 +368,6 @@ void mouseapp_init(void)
                                         wiced_bt_hid_cfg_settings.ble_scan_cfg.conn_supervision_timeout);//600 * 10=600ms=6 seconds
 
     mouseapp_setUpAdvData();
-
-    //timer to allow Shut Down Sleep (SDS)
-    wiced_init_timer( &blemouse_allow_sleep_timer, mouseapp_allowsleep_timeout, 0, WICED_MILLI_SECONDS_TIMER );
 
     //timer to request connection param update
     wiced_init_timer( &blemouse_conn_param_update_timer, mouseapp_connparamupdate_timeout, 0, WICED_MILLI_SECONDS_TIMER );
@@ -448,7 +418,7 @@ void mouseapp_init(void)
 
     wiced_ble_hidd_link_register_poll_callback(mouseapp_pollReportUserActivity);
 
-    wiced_ble_hidd_link_register_sleep_permit_handler(mouseapp_sleep_handler);
+    wiced_hidd_link_register_sleep_permit_handler(mouseapp_sleep_handler);
 
     if(mouseapp_protocol == PROTOCOL_REPORT)
     {
@@ -462,13 +432,13 @@ void mouseapp_init(void)
     }
 
 #ifdef SUPPORT_MOTION
-    if ( MOTION_ON && wiced_ble_hidd_host_info_is_bonded())
+    if (wiced_hidd_is_paired())
     {
-        WICED_BT_TRACE("MOTION INRT enabled!\n");
-        PAW3805_enable_Interrupt(WICED_TRUE);
+        WICED_BT_TRACE("\nMOTION INTR enabled!");
+        motion_enableIntr(WICED_TRUE);
     }
 #endif
-    wiced_ble_hidd_link_init();
+    wiced_hidd_link_init();
 
     wiced_hal_mia_enable_mia_interrupt(TRUE);
     wiced_hal_mia_enable_lhl_interrupt(TRUE);
@@ -479,7 +449,7 @@ void mouseapp_init(void)
 ////////////////////////////////////////////////////////////////////////////////
 void mouseapp_shutdown(void)
 {
-    WICED_BT_TRACE("mouseapp_shutdown\n");
+    WICED_BT_TRACE("\nmouseapp_shutdown");
 
     mouseapp_flushUserInput();
 
@@ -489,21 +459,16 @@ void mouseapp_shutdown(void)
 #endif
 
 #ifdef SUPPORT_MOTION
-    if (motionOn)
-    {
-        //flush motion data
-        PAW3805_flushMotion();
-        //power down
-        PAW3805_powerdown();
-    }
+     //power down
+    motion_powerDown();
 #endif
 
     // Disable button detection
     wiced_hal_keyscan_turnOff();
 
-    if(wiced_ble_hidd_link_is_connected())
+    if(wiced_hidd_link_is_connected())
     {
-        wiced_ble_hidd_link_disconnect();
+        wiced_hidd_disconnect();
     }
 
     // Disable Interrupts
@@ -520,6 +485,7 @@ void mouseapp_pollReportUserActivity(void)
     uint8_t activitiesDetectedInLastPoll;
 
     mouseAppState->mouseapp_pollSeqn++;
+    trigger(1);
 
     if((mouseAppState->mouseapp_pollSeqn % 64) == 0)
     {
@@ -530,13 +496,13 @@ void mouseapp_pollReportUserActivity(void)
 
     // If there was an activity and the transport is not connected
     if (activitiesDetectedInLastPoll != BLEHIDLINK_ACTIVITY_NONE &&
-        !wiced_ble_hidd_link_is_connected())
+        !wiced_hidd_link_is_connected())
     {
         // ask the transport to connect.
         wiced_ble_hidd_link_connect();
     }
 
-    if(wiced_ble_hidd_link_is_connected())
+    if(wiced_hidd_link_is_connected())
     {
         // Generate a report
         if(wiced_bt_hid_cfg_settings.security_requirement_mask)
@@ -582,11 +548,8 @@ uint8_t mouseapp_pollActivityUser(void)
     wiced_hal_mia_pollHardware();
 
 #ifdef SUPPORT_MOTION
-    if (MOTION_ON)
-    {
-        // Check for XY motion
-        mouseapp_pollActivityXYSensor();
-    }
+    // Check for XY motion
+    mouseapp_pollActivityXYSensor();
 #endif
 #ifdef SUPPORT_SCROLL
     // Check for scroll
@@ -599,6 +562,7 @@ uint8_t mouseapp_pollActivityUser(void)
     return (wiced_hidd_event_queue_get_num_elements(&mouseAppState->mouseappEventQueue) ? BLEHIDLINK_ACTIVITY_REPORTABLE : BLEHIDLINK_ACTIVITY_NONE);
 }
 
+#ifdef SUPPORT_SCROLL
 /////////////////////////////////////////////////////////////////////////////////
 /// This function polls the scroll interface to get any newly detected
 /// scroll count. It negates the data and performs any scaling if configured to do so.
@@ -610,9 +574,21 @@ void mouseapp_pollActivityScroll(void)
 {
     int16_t scrollCurrent;
 
+#if 1
+    scrollCurrent = wiced_hal_quadrature_get_scroll_count();
+#else
+    int16_t scroll;
+    int16_t readCount = blemouseAppConfig.maxNumXYReadsPerPoll * 2;
+
+    scrollCurrent = 0;
+    while ((scroll = wiced_hal_quadrature_get_scroll_count()) && readCount--)
+        scrollCurrent += scroll;
+#endif
+
     // Check for scroll
-    if ((scrollCurrent = wiced_hal_quadrature_get_scroll_count()))
-    {//WICED_BT_TRACE("scroll count:%d\n", scrollCurrent);
+    if (scrollCurrent)
+    {
+        //WICED_BT_TRACE("\nsc:%d", scrollCurrent);
         // Negate scroll value if enabled
         if (blemouseAppConfig.negateScroll)
         {
@@ -659,6 +635,7 @@ void mouseapp_pollActivityScroll(void)
         }
     }
 }
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////
 ///   This function scales (divides by a power of 2) a value, returns the quotient
@@ -705,41 +682,6 @@ int16_t mouseapp_scaleValue(int16_t *val, uint8_t scaleFactor)
 
     // Return the scaled value
     return result;
-}
-
-/////////////////////////////////////////////////////////////////////////////////
-/// This function performs connection button processing. It should be called with
-/// the current state of the connect button. This function generates a
-/// become discoverable event to the BT Transport if the connect button is
-/// held for the configured duration. The configured duration may be 0
-/// in which case an instantaneous press of the button causes the device
-/// to become discoverable. Once a "become disoverable" event has
-/// been generated, not further events will be generated until after the
-/// button has been released
-///
-/// \param connectButtonPosition current position of the connect button, up or down
-/////////////////////////////////////////////////////////////////////////////////
-void mouseapp_connectButtonHandler(ConnectButtonPosition connectButtonPosition)
-{
-    // The connect button was not pressed. Check if it is now pressed
-    if (connectButtonPosition == CONNECT_BUTTON_DOWN)
-    {
-        WICED_BT_TRACE("Connect Btn Pressed\n");
-        mouseapp_connectButtonPressed();
-    }
-}
-
-/////////////////////////////////////////////////////////////////////////////////
-/// This method handles connect button pressed events. It performs the following
-/// actions in order:
-///  - If we are configured to generate a VC unplug on connect button press
-///    it generates a VC unplug to the BT transport
-///  - If we are configured to become discoverable on connect button press
-///    it tells the BT transport to become discoverable
-/////////////////////////////////////////////////////////////////////////////////
-void mouseapp_connectButtonPressed(void)
-{
-    wiced_ble_hidd_link_virtual_cable_unplug();
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -793,21 +735,23 @@ void mouseapp_batRptSend(void)
 /////////////////////////////////////////////////////////////////////////////////
 void mouseapp_userKeyPressDetected(void *MApp)
 {
-    //WICED_BT_TRACE("kbapp_userKeyPressDetected\n");
-    mouseAppState->keyInterrupt_On = wiced_hal_keyscan_is_any_key_pressed();
-
+    WICED_BT_TRACE("\nk");
+    trigger(3);
     // Poll the app.
     mouseapp_pollReportUserActivity();
 }
 
 
+#ifdef SUPPORT_SCROLL
 // Scroll/Quadrature interrupt
 void mouseapp_userScrollDetected(void* unused)
 {
-    //WICED_BT_TRACE("mouseapp_userScrollDetected\n");
+    WICED_BT_TRACE("\ns");
+    trigger(4);
     //Poll the app.
     mouseapp_pollReportUserActivity();
 }
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////
 /// This function informs the application that the state of a link changed.
@@ -819,45 +763,41 @@ void mouseapp_userScrollDetected(void* unused)
 void mouseapp_stateChangeNotification(uint32_t newState)
 {
     int16_t flags;
-    WICED_BT_TRACE("Transport state changed to %d\n", newState);
+    WICED_BT_TRACE("\nTransport state changed to %d", newState);
 
-    mouseAppState->allowSDS = FALSE;
+    wiced_hidd_set_deep_sleep_allowed(WICED_FALSE);
 
-    //stop allow SDS (shut down sleep) timer
-    wiced_stop_timer(&blemouse_allow_sleep_timer);
+    trigger(5);
+
+#ifdef SUPPORT_MOTION
+    // We enable interrupt if link is not connect.
+    motion_enableIntr(newState != BLEHIDLINK_CONNECTED);
+#endif
 
     if(newState == BLEHIDLINK_CONNECTED)
     {
         //get host client configuration characteristic descriptor values
-        flags = wiced_ble_hidd_host_info_get_flags(ble_hidd_link.gatts_peer_addr, ble_hidd_link.gatts_peer_addr_type);
+        flags = wiced_hidd_host_get_flags(ble_hidd_link.gatts_peer_addr, ble_hidd_link.gatts_peer_addr_type);
         if(flags != -1)
         {
-            WICED_BT_TRACE("host config flag:%08x\n",flags);
+            WICED_BT_TRACE("\nhost config flag:%08x",flags);
             mouseapp_updateGattMapWithNotifications(flags);
         }
 
         //enable application polling
         wiced_ble_hidd_link_enable_poll_callback(WICED_TRUE);
 
-#ifdef SUPPORT_MOTION
-        if (MOTION_ON)
-        {
-            //enable motion interrupt
-            PAW3805_enable_Interrupt(WICED_TRUE);
-        }
-#endif
-
         if(firstTransportStateChangeNotification)
         {
             //Wake up from shutdown sleep (SDS) and already have a connection then allow SDS in 1 second
             //This will allow time to send a mouse report
-            wiced_start_timer(&blemouse_allow_sleep_timer,1000); // 1 second. timeout in ms
+            wiced_hidd_deep_sleep_not_allowed(1000); // 1 second. timeout in ms
         }
         else
         {
             //We connected after power on reset
             //Start 20 second timer to allow time to setup connection encryption before allowing shutdown sleep (SDS).
-            wiced_start_timer(&blemouse_allow_sleep_timer,20000); //20 seconds. timeout in ms
+            wiced_hidd_deep_sleep_not_allowed(20000); //20 seconds. timeout in ms
 
             //start 15 second timer to make sure connection param update is requested before SDS
             wiced_start_timer(&blemouse_conn_param_update_timer,15000); //15 seconds. timeout in ms
@@ -868,7 +808,7 @@ void mouseapp_stateChangeNotification(uint32_t newState)
         //allow Shut Down Sleep (SDS) only if we are not attempting reconnect
         if (!wiced_is_timer_in_use(&ble_hidd_link.reconnect_timer))
         {
-            wiced_start_timer(&blemouse_allow_sleep_timer,2000); // 2 seconds. timeout in ms
+            wiced_hidd_deep_sleep_not_allowed(2000); //2 seconds. timeout in ms
         }
 
         wiced_hal_mia_enable_mia_interrupt(TRUE);
@@ -877,7 +817,7 @@ void mouseapp_stateChangeNotification(uint32_t newState)
     }
     else if ((newState == BLEHIDLINK_ADVERTISING_IN_uBCS_DIRECTED) || (newState == BLEHIDLINK_ADVERTISING_IN_uBCS_UNDIRECTED))
     {
-        mouseAppState->allowSDS = TRUE;
+        wiced_hidd_set_deep_sleep_allowed(WICED_TRUE);
     }
 
     if(firstTransportStateChangeNotification)
@@ -888,7 +828,7 @@ void mouseapp_stateChangeNotification(uint32_t newState)
 
 void mouseapp_batLevelChangeNotification(uint32_t newLevel)
 {
-    //WICED_BT_TRACE("bat level changed to %d\n", newLevel);
+    //WICED_BT_TRACE("\nbat level changed to %d", newLevel);
 
     if (mouseapp_protocol == PROTOCOL_REPORT)
     {
@@ -942,11 +882,12 @@ void mouseapp_clientConfWriteRptStd(wiced_hidd_report_type_t reportType,
     uint8_t  notification = *(uint16_t *)payload & GATT_CLIENT_CONFIG_NOTIFICATION;
     //uint8_t  indication = *(uint16_t *)payload & GATT_CLIENT_CONFIG_INDICATION;
 
-    WICED_BT_TRACE("mouseapp_clientConfWriteRptStd\n");
+    WICED_BT_TRACE("\nmouseapp_clientConfWriteRptStd");
 
     mouseapp_updateClientConfFlags(notification, MOUSEAPP_CLIENT_CONFIG_NOTIF_STD_RPT);
 }
 
+#ifdef SUPPORT_MOTION
 /////////////////////////////////////////////////////////////////////////////////
 /// This function polls the XY sensor to get any newly detected XY count.
 /// It negates the data and performs any scaling if configured to do so.
@@ -957,96 +898,91 @@ void mouseapp_clientConfWriteRptStd(wiced_hidd_report_type_t reportType,
 void mouseapp_pollActivityXYSensor(void)
 {
     int16_t xCurrent = 0, yCurrent = 0, tmp = 0;
-#ifdef SUPPORT_MOTION
+
+    trigger(6);
     // Check for XY motion
-    PAW3805_getMotion(&xCurrent,&yCurrent);
-#endif
-    // Check if any motion was detected
-    if (xCurrent || yCurrent)
+    while (motion_getMotion(&xCurrent, &yCurrent, blemouseAppConfig.maxNumXYReadsPerPoll))
     {
-        // Swap XY if enabled
-        if (blemouseAppConfig.swapXY)
+        if (xCurrent || yCurrent)
         {
-            // Use global temporary for swapping
-            tmp = xCurrent;
-            xCurrent = yCurrent;
-            yCurrent = tmp;
-        }
+            // Swap XY if enabled
+            if (blemouseAppConfig.swapXY)
+            {
+                // Use global temporary for swapping
+                tmp = xCurrent;
+                xCurrent = yCurrent;
+                yCurrent = tmp;
+            }
 
-        // Negate X if enabled
-        if (blemouseAppConfig.negateX)
-        {
-            xCurrent = -xCurrent;
-        }
+            // Negate X if enabled
+            if (blemouseAppConfig.negateX)
+            {
+                xCurrent = -xCurrent;
+            }
 
-        // Negate Y if enabled
-        if (blemouseAppConfig.negateY)
-        {
-            yCurrent = -yCurrent;
-        }
+            // Negate Y if enabled
+            if (blemouseAppConfig.negateY)
+            {
+                yCurrent = -yCurrent;
+            }
 
-        mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in++].eventInfo.eventType = HID_EVENT_MOTION_AXIS_X_Y;
-        if (mouseAppState->motion_fifo_in == MOTION_FIFO_CNT)
-        {
-            mouseAppState->motion_fifo_in = 0;
-        }
+            mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in++].eventInfo.eventType = HID_EVENT_MOTION_AXIS_X_Y;
+            if (mouseAppState->motion_fifo_in == MOTION_FIFO_CNT)
+            {
+                mouseAppState->motion_fifo_in = 0;
+            }
 
-        // Check if XY scaling is enabled
-        if (blemouseAppConfig.xScale | blemouseAppConfig.yScale)
-        {
-            // Yes. Add the new motion to the accumulated motion
-            mouseAppState->mouseapp_xFractional += xCurrent;
-            mouseAppState->mouseapp_yFractional += yCurrent;
+            // Check if XY scaling is enabled
+            if (blemouseAppConfig.xScale | blemouseAppConfig.yScale)
+            {
+                // Yes. Add the new motion to the accumulated motion
+                mouseAppState->mouseapp_xFractional += xCurrent;
+                mouseAppState->mouseapp_yFractional += yCurrent;
 
-            // Scale and adjust accumulated X motion value. Fractional value will be
-            // left in the factional part. Place the whole number in the XY motion event.
-            mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionX = mouseapp_scaleValue(&mouseAppState->mouseapp_xFractional, blemouseAppConfig.xScale);
+                // Scale and adjust accumulated X motion value. Fractional value will be
+                // left in the factional part. Place the whole number in the XY motion event.
+                mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionX = mouseapp_scaleValue(&mouseAppState->mouseapp_xFractional, blemouseAppConfig.xScale);
 
-            // Scale and adjust accumulated Y motion value. Fractional value will be
-            // left in the factional part. Place the whole number in the XY motion event.
-            mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionY = mouseapp_scaleValue(&mouseAppState->mouseapp_yFractional, blemouseAppConfig.yScale);
+                // Scale and adjust accumulated Y motion value. Fractional value will be
+                // left in the factional part. Place the whole number in the XY motion event.
+                mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionY = mouseapp_scaleValue(&mouseAppState->mouseapp_yFractional, blemouseAppConfig.yScale);
 
-            // Reset the XY discard counter
-            mouseAppState->mouseapp_pollsSinceXYMotion = 0;
+                // Reset the XY discard counter
+                mouseAppState->mouseapp_pollsSinceXYMotion = 0;
+            }
+            else
+            {
+                // Scaling is not enabled. Place the detected XY motion directly in the xy event
+                mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionX = xCurrent;
+                mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionY = yCurrent;
+            }
+
+            WICED_BT_TRACE("\nM xy:%d,%d", mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionX, mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionY);
+            // Queue the event with the proper seqn
+            wiced_hidd_event_queue_add_event_with_overflow(&mouseAppState->mouseappEventQueue, &mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].eventInfo, sizeof(HidEventMotionXY), mouseAppState->mouseapp_pollSeqn);
         }
         else
         {
-            // Scaling is not enabled. Place the detected XY motion directly in the xy event
-            mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionX = xCurrent;
-            mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionY = yCurrent;
-        }
+            // If XY scaling timeout is not infinite, bump up the
+            // inactivity counter and check if we have crossed the threshold.
+            if (blemouseAppConfig.pollsToKeepFracXYData &&
+                ++mouseAppState->mouseapp_pollsSinceXYMotion >= blemouseAppConfig.pollsToKeepFracXYData)
+            {
+                // We have. Discard any fractional XY data
+                mouseAppState->mouseapp_xFractional = mouseAppState->mouseapp_yFractional = 0;
 
-        // Queue the event with the proper seqn
-        wiced_hidd_event_queue_add_event_with_overflow(&mouseAppState->mouseappEventQueue, &mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].eventInfo, sizeof(HidEventMotionXY), mouseAppState->mouseapp_pollSeqn);
-    }
-    else
-    {
-        // If XY scaling timeout is not infinite, bump up the
-        // inactivity counter and check if we have crossed the threshold.
-        if (blemouseAppConfig.pollsToKeepFracXYData &&
-            ++mouseAppState->mouseapp_pollsSinceXYMotion >= blemouseAppConfig.pollsToKeepFracXYData)
-        {
-            // We have. Discard any fractional XY data
-            mouseAppState->mouseapp_xFractional = mouseAppState->mouseapp_yFractional = 0;
-
-            // Reset the XY poll counter
-            mouseAppState->mouseapp_pollsSinceXYMotion = 0;
+                // Reset the XY poll counter
+                mouseAppState->mouseapp_pollsSinceXYMotion = 0;
+            }
         }
     }
 }
 
-#ifdef SUPPORT_MOTION
 // Motion interrupt
 void mouseapp_userMotionXYDetected(void* unused, uint8_t port)
 {
-    if (MOTION_ON)
-    {
-        mouseapp_pollReportUserActivity();
-    }
-    else
-    {WICED_BT_TRACE("MOTION INRT disabled!\n");
-        PAW3805_enable_Interrupt(WICED_FALSE);
-    }
+    WICED_BT_TRACE("\nm");
+    mouseapp_pollReportUserActivity();
 }
 #endif
 
@@ -1101,12 +1037,13 @@ void mouseapp_generateReportSet(void)
                     combiningEventType = HID_EVENT_NONE;
                 }
                 break;
+
             case HID_EVENT_MOTION_AXIS_X_Y:
 #ifdef SUPPORT_MOTION
                 //NOTE: We'd like to disable motion interrupt and rely on app polling to stream motion XY movement.
                 //Otherwise, too many motion interrupt will cause unnecessary handling and make the motion XY movement unsmooth.
                 //disable motion INTERRUPT
-                PAW3805_enable_Interrupt(WICED_FALSE);
+                motion_enableIntr(WICED_FALSE);
 #endif
                 // Update XY counts
                 mouseAppState->mouseapp_xMotion += ((HidEventMotionXY *)event)->motionX;
@@ -1143,8 +1080,9 @@ void mouseapp_generateReportSet(void)
                 mouseAppState->mouseapp_reportableDataInReportSet = TRUE;
 
                 break;
+
             case HID_EVENT_EVENT_FIFO_OVERFLOW:
-                WICED_BT_TRACE("event queue overflow. FLUSH!!!\n");
+                WICED_BT_TRACE("\nevent queue overflow. FLUSH!!!");
                 // Flush the event fifo since we have no idea what made it in and what didn't
                 wiced_hidd_event_queue_flush(&mouseAppState->mouseappEventQueue);
 
@@ -1162,7 +1100,7 @@ void mouseapp_generateReportSet(void)
         }
 
         // We are done with the current event. Remove it from the queue
-       wiced_hidd_event_queue_remove_current_element(&mouseAppState->mouseappEventQueue);
+        wiced_hidd_event_queue_remove_current_element(&mouseAppState->mouseappEventQueue);
 
         // Get pointer to the next event.
         event = (HidEvent *)wiced_hidd_event_queue_get_current_element(&mouseAppState->mouseappEventQueue);
@@ -1221,7 +1159,7 @@ void mouseapp_createAndTxBootModeReport(void)
 
     // Transfer the report over the active transport. We know we have space for at
     // least one report
-    WICED_BT_TRACE("Boot Rpt\n");
+    WICED_BT_TRACE("\nBoot Rpt");
 
     //set gatt attribute value here before sending the report
     memcpy(blemouse_input_rpt, &mouseAppState->mouseapp_bootModeReport.buttonState, blemouseAppConfig.motionReportBootModeSize);
@@ -1320,33 +1258,22 @@ void mouseapp_txReportSet(void)
 void mouseapp_pollActivityButton(void)
 {
     uint16_t newButtonStatus;
-    static ConnectButtonPosition prevConnectButtonPosition = CONNECT_BUTTON_UP;
 
     do
     {
+#ifdef MOUSE_PLATFORM
         // Get the button status
-        newButtonStatus =  wiced_hal_keyscan_button_get_current_state();
+        newButtonStatus = wiced_hal_keyscan_button_get_current_state();
 
         if (newButtonStatus & blemouseAppConfig.connectButtonMask)
         {
-            prevConnectButtonPosition = CONNECT_BUTTON_DOWN;
+            wiced_hal_keyscan_flush_HW_events();
+            wiced_ble_hidd_link_virtual_cable_unplug();
+            break;
         }
-        else
-        {
-            if (prevConnectButtonPosition == CONNECT_BUTTON_DOWN)
-            {
-               wiced_hal_keyscan_flush_HW_events();
-               prevConnectButtonPosition = CONNECT_BUTTON_UP;
-            }
-        }
-
-        // Extract connect button state and update hid application
-        mouseapp_connectButtonHandler((newButtonStatus & blemouseAppConfig.connectButtonMask)?
-                         CONNECT_BUTTON_DOWN: CONNECT_BUTTON_UP);
-
-        // Eliminate connect button state
-        newButtonStatus &= ~blemouseAppConfig.connectButtonMask;
-
+#else
+        newButtonStatus = wiced_hal_gpio_get_pin_input_status(P_MOTION) ? NO_BUTTON_BIT : LEFT_BUTTON_BIT; // pin pulled high, button press shorting to ground. Thus 1:UP, 0:Down
+#endif
         // Check if button status has changed
         if (newButtonStatus != mouseAppState->mouseapp_buttonEvent.buttonState)
         {
@@ -1355,19 +1282,22 @@ void mouseapp_pollActivityButton(void)
             wiced_hidd_event_queue_add_event_with_overflow(&mouseAppState->mouseappEventQueue, &mouseAppState->mouseapp_buttonEvent.eventInfo, sizeof(mouseAppState->mouseapp_buttonEvent), mouseAppState->mouseapp_pollSeqn);
         }
     }
+#ifdef MOUSE_PLATFORM
     while (wiced_hal_keyscan_events_pending());
+#else
+    while (0);
+#endif
 
 }
-
 
 void mouseapp_ctrlPointWrite(wiced_hidd_report_type_t reportType,
                           uint8_t reportId,
                           void *payload,
                           uint16_t payloadSize)
 {
-    WICED_BT_TRACE("mouseapp_ctrlPointWrite\n");
+    WICED_BT_TRACE("\nmouseapp_ctrlPointWrite");
 
-    wiced_ble_hidd_link_disconnect();
+    wiced_hidd_disconnect();
 }
 
 //
@@ -1381,7 +1311,7 @@ void mouseapp_clientConfWriteBootMode(wiced_hidd_report_type_t reportType,
     uint8_t  notification = *(uint16_t *)payload & GATT_CLIENT_CONFIG_NOTIFICATION;
     //uint8_t  indication = *(uint16_t *)payload & GATT_CLIENT_CONFIG_INDICATION;
 
-    WICED_BT_TRACE("mouseapp_clientConfWriteBootMode\n");
+    WICED_BT_TRACE("\nmouseapp_clientConfWriteBootMode");
 
     mouseapp_updateClientConfFlags(notification, MOUSEAPP_CLIENT_CONFIG_NOTIF_BOOT_RPT);
 }
@@ -1394,7 +1324,7 @@ void mouseapp_clientConfWriteBatteryRpt(wiced_hidd_report_type_t reportType,
     uint8_t  notification = *(uint16_t *)payload & GATT_CLIENT_CONFIG_NOTIFICATION;
     //uint8_t  indication = *(uint16_t *)payload & GATT_CLIENT_CONFIG_INDICATION;
 
-    WICED_BT_TRACE("mouseapp_clientConfWriteBatteryRpt\n");
+    WICED_BT_TRACE("\nmouseapp_clientConfWriteBatteryRpt");
 
     mouseapp_updateClientConfFlags(notification, MOUSEAPP_CLIENT_CONFIG_NOTIF_BATTERY_RPT);
 }
@@ -1420,7 +1350,7 @@ void mouseapp_setProtocol(wiced_hidd_report_type_t reportType,
 
 void mouseapp_updateClientConfFlags(uint16_t enable, uint16_t featureBit)
 {
-    mouseapp_updateGattMapWithNotifications(wiced_ble_hidd_host_info_update_flags(ble_hidd_link.gatts_peer_addr, ble_hidd_link.gatts_peer_addr_type, enable,featureBit));
+    mouseapp_updateGattMapWithNotifications(wiced_hidd_host_set_flags(ble_hidd_link.gatts_peer_addr, enable, featureBit));
 }
 
 void mouseapp_updateGattMapWithNotifications(uint16_t flags)
@@ -1472,11 +1402,7 @@ uint32_t mouseapp_sleep_handler(wiced_sleep_poll_type_t type )
 {
     uint32_t ret = WICED_SLEEP_NOT_ALLOWED;
 
-#ifndef  TESTING_USING_HCI
-    // Check if keys are pressed before deciding whether sleep is allowed
-    mouseAppState->keyInterrupt_On = wiced_hal_keyscan_is_any_key_pressed();
-#endif
-
+#if SLEEP_ALLOWED
     switch(type)
     {
         case WICED_SLEEP_POLL_TIME_TO_SLEEP:
@@ -1484,36 +1410,20 @@ uint32_t mouseapp_sleep_handler(wiced_sleep_poll_type_t type )
             break;
 
         case WICED_SLEEP_POLL_SLEEP_PERMISSION:
+ #if SLEEP_ALLOWED > 1
             ret = WICED_SLEEP_ALLOWED_WITH_SHUTDOWN;
-
-            if (!mouseAppState->allowSDS)
-            {
-                ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
-            }
-
-            //if key is not released, no Shut Down Sleep (SDS)
-            if (mouseAppState->keyInterrupt_On)
-            {
-                ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
-            }
-
-#ifdef SUPPORT_MOTION
-            if (MOTION_ON && PAW3805_isActive())
-            {
-                ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
-            }
-#endif
-
-#ifdef OTA_FIRMWARE_UPGRADE
-            if ( wiced_ota_fw_upgrade_is_active() )
-            {
-                ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
-            }
-#endif
+            // a key is down, no deep sleep
+            if (wiced_hal_keyscan_is_any_key_pressed()
+  #ifdef SUPPORT_MOTION
+                || motion_isActive()
+  #endif
+               )
+ #endif
+            ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
             break;
 
     }
-
+#endif
     return ret;
 }
 

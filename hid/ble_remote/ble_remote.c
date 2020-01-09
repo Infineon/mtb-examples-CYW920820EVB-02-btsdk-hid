@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -59,53 +59,12 @@
 *  - Low power management
 *  - Over the air firmware update (OTAFWU)
 *
-* To demonstrate the app, walk through the following steps.
-* 1. Plug the CYW920819EVB_02 board or the 20819A1 Remote Control HW into your computer
-* 2. Put on jumper to bypass Serial Flash (i.e. jumper on J5 in CYW920819EVB_02 board), then power up the board or Remote Control HW.
-* 3. Remove the jumper so that download procedure bellowed can write to Serial Flash.
-* 4. Build and download the application (to the EVAL board or Remote Control HW)
-* 5. If download failed due to not able to detecting device, just repeat step 4 again.
-* 6. Unplug the EVAL board or Remote Control HW from your computer (i.e. unplug the UART cable)
-* 7. Power cycle the EVAL board or Remote Control HW.
-* 8. Press any key to start LE advertising, then pair with a TV
-*    If using the CYW920819EVB_02 board, use a fly wire to connect GPIO P0 and P11 to simulate key '0' press,
-*     and remove the wire to simulate key release.
-* 9. Once connected, it becomes the remote control of the TV.
-* 10. If you have the 20819A1 Remote Control HW:
-*     - Press and hold microphone key, voice streaming starts until the key is released.
-*     - Touch touchpad, touchpad report will be sent to the TV.
-*
-* In case what you have is the WICED EVAL board, you can either use fly wire to connect to GPIOs to simulate key press and release.
-* Or using the ClientControl tool in the tools to simulate key press and release.*
-* 1. Plug the WICED EVAL board into your computer
-* 2. Build and download the application (to the WICED board)
-* 3. If failed to download due to device not detected, just repeat step 2 again.
-* 4. Press any key to start LE advertising, then pair with a TV
-*     Use a fly wire to connect GPIO P0 and P11 to simulate key '0' press,
-*     and remove the wire to simulate key release.
-* 5. Once connected, it becomes the remote control of the TV.
-*
-* To use ClientControl tool + WICED EVAL board to simulate key press and release.
-* NOTE: Make sure you use "TESTING_USING_HCI=1" in application settings.
-* In ModusToolbox, select right click on app and select 'Change Application Settings'
-*
-* 1~3. same download procedure as above
-* 4. Run ClientControl.exe.
-* 5. Choose 3M as Baudrate and select the serial port in ClientControl tool window.
-* 6. Press Reset button on the board and open the port.
-* 7. Press "Enter Pairing Mode"or "Connect" to start LE advertising, then pair with a PC or Tablet
-* 8. Once connected, it becomes the remote control of the TV.
-*  - Select Interrupt channel, Input report, enter the contents of the report
-*    and click on the Send button, to send the report.  For example to send
-*    key down event when key '1' is pushed, report should be
-*    01 00 00 1e 00 00 00 00 00.  All keys up 01 00 00 00 00 00 00 00 00.
-*    Please make sure you always send a key up report following key down report.
+* See readme for instructions.
 */
 
 #include "gki_target.h"
 #include "wiced_bt_cfg.h"
 #include "ble_remote_gatts.h"
-#include "blehidgatts.h"
 #include "ble_remote.h"
 #include "wiced_bt_gatt.h"
 #include "wiced_hal_mia.h"
@@ -235,11 +194,13 @@ wiced_blehidd_report_gatt_characteristic_t bleRemoteReportModeGattMap[] =
     {MOTION_REPORT_ID   ,   WICED_HID_REPORT_TYPE_INPUT ,   HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_MOTION_VAL,             FALSE,NULL, KBAPP_CLIENT_CONFIG_NOTIF_MOTION_RPT},
     //user defined 0 key report
     {0x0A,                  WICED_HID_REPORT_TYPE_INPUT ,   HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_USER_DEFINED_0_VAL,     FALSE,NULL, KBAPP_CLIENT_CONFIG_NOTIF_USER_DEFINED_KEY_RPT},
+#ifdef SUPPORT_AUDIO
     //voice report
     {WICED_HIDD_VOICE_REPORT_ID, WICED_HID_REPORT_TYPE_INPUT, HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_VOICE_VAL,            FALSE,NULL, KBAPP_CLIENT_CONFIG_NOTIF_VOICE_RPT},
     //voice ctrl report
     {WICED_HIDD_VOICE_CTL_REPORT_ID,   WICED_HID_REPORT_TYPE_INPUT ,   HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_VOICE_CTRL_INPUT_VAL,   FALSE,NULL, KBAPP_CLIENT_CONFIG_NOTIF_VOICE_CTRL_RPT},
     {WICED_HIDD_VOICE_CTL_REPORT_ID,   WICED_HID_REPORT_TYPE_FEATURE,  HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_VOICE_CTRL_FEA_VAL,     FALSE,bleremoteapp_setReport, KBAPP_CLIENT_CONFIG_NOTIF_NONE},
+#endif
 #ifdef SUPPORT_TOUCHPAD
     //touchpad report
     {RPT_ID_IN_ABS_XY,      WICED_HID_REPORT_TYPE_INPUT ,   HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_TOUCHPAD_VAL,           FALSE,NULL, KBAPP_CLIENT_CONFIG_NOTIF_TOUCHPAD_RPT},
@@ -279,13 +240,15 @@ uint8_t bleremote_connection_ctrl_rpt = 0;
 uint8_t battery_level = 100;
 uint8_t firstTransportStateChangeNotification = 1;
 uint8_t bleremote_user_defined_0_rpt[8] = {0, };
-#ifdef ATT_MTU_SIZE_180
+#ifdef SUPPORT_AUDIO
+ #ifdef ATT_MTU_SIZE_180
 uint8_t bleremote_voice_rpt[WICED_HIDD_MIC_AUDIO_BUFFER_SIZE*2+1] = {0,};
-#else
+ #else
 uint8_t bleremote_voice_rpt[20] = {0,};
-#endif
+ #endif
 uint8_t bleremote_voice_ctrl_input_rpt[sizeof(wiced_hidd_voice_control_report_t)-1] = {0,};
 uint8_t bleremote_voice_ctrl_feature_rpt[sizeof(wiced_hidd_voice_control_report_t)-1] = {0,};
+#endif
 
 wiced_timer_t allow_sleep_timer;
 wiced_timer_t mic_stop_command_pending_timer;
@@ -353,7 +316,7 @@ void bleremoteapp_allowIrTx_timeout( uint32_t arg)
 ////////////////////////////////////////////////////////////////////////////////
 void bleremoteapp_allowsleep_timeout( uint32_t arg )
 {
-    WICED_BT_TRACE("allow SDS\n");
+    WICED_BT_TRACE("\nallow SDS");
 
     bleRemoteAppState->allowSDS = 1;
 }
@@ -382,7 +345,7 @@ void bleremoteapp_connparamupdate_timeout( uint32_t arg )
 ////////////////////////////////////////////////////////////////////////////////
 void mic_stop_command_pending_timeout( uint32_t arg )
 {
-    WICED_BT_TRACE("MIC Command Pending Timeout\n");
+    WICED_BT_TRACE("\nMIC Command Pending Timeout");
     stopMicCommandPending = FALSE;
 #ifdef OTA_FIRMWARE_UPGRADE
     if (!wiced_ota_fw_upgrade_is_active())
@@ -401,7 +364,7 @@ static void bleremote_motionsensorActivityDetected(void* remApp, uint8_t unsued)
 {
     // when not connected, use motion to trigger connect
     // when connected we rely on the regular poll to get data
-    if (!wiced_ble_hidd_link_is_connected())
+    if (!wiced_hidd_link_is_connected())
     {
         bleremoteapp_pollReportUserActivity();
     }
@@ -423,7 +386,7 @@ void bleremoteapp_pre_init(void)
 {
     uint8_t index;
 
-    WICED_BT_TRACE("bleremoteapp_pre_init\n");
+    WICED_BT_TRACE("\nbleremoteapp_pre_init");
 
 #ifdef SUPPORT_IR
     //IR Tx feature,P38
@@ -530,7 +493,7 @@ void bleremoteapp_pre_init(void)
 /////////////////////////////////////////////////////////////////////////////////////////////
 void bleremoteapp_create(void)
 {
-    WICED_BT_TRACE("bleremoteapp_create\n");
+    WICED_BT_TRACE("\nbleremoteapp_create");
     //battery monitoring configuraion
     wiced_hal_batmon_config(ADC_INPUT_VDDIO,      // ADC input pin
                             3000,               // Period in millisecs between battery measurements
@@ -561,7 +524,7 @@ void bleremoteapp_create(void)
     bleremoteapp_findme_init();
 #endif
 
-    WICED_BT_TRACE("Free RAM bytes=%d bytes\n", wiced_memory_get_free_bytes());
+    WICED_BT_TRACE("\nFree RAM bytes=%d bytes", wiced_memory_get_free_bytes());
 
 }
 
@@ -588,7 +551,7 @@ void bleremote_2nd_link_up_handler(wiced_bt_gatt_connection_status_t *p_status)
 ////////////////////////////////////////////////////////////////////////////////
 void bleremoteapp_init(void)
 {
-    WICED_BT_TRACE("bleremoteapp_init\n");
+    WICED_BT_TRACE("\nbleremoteapp_init");
 
 #ifdef CONNECTED_ADVERTISING_SUPPORTED
     wiced_bt_gatt_2nd_link_up_handler = bleremote_2nd_link_up_handler;
@@ -661,11 +624,11 @@ void bleremoteapp_init(void)
 
     wiced_ble_hidd_link_register_poll_callback(bleremoteapp_pollReportUserActivity);
 
-    wiced_ble_hidd_link_register_sleep_permit_handler(bleremoteapp_sleep_handler);
+    wiced_hidd_link_register_sleep_permit_handler(bleremoteapp_sleep_handler);
 
     wiced_blehidd_register_report_table(bleRemoteReportModeGattMap, sizeof(bleRemoteReportModeGattMap)/sizeof(bleRemoteReportModeGattMap[0]));
 
-    wiced_ble_hidd_link_init();
+    wiced_hidd_link_init();
 
     wiced_hal_mia_enable_mia_interrupt(TRUE);
     wiced_hal_mia_enable_lhl_interrupt(TRUE);//GPIO interrupt
@@ -677,7 +640,7 @@ void bleremoteapp_init(void)
 ////////////////////////////////////////////////////////////////////////////////
 void bleremoteapp_shutdown(void)
 {
-    WICED_BT_TRACE("bleremoteapp_shutdown\n");
+    WICED_BT_TRACE("\nbleremoteapp_shutdown");
 
     bleremoteapp_flushUserInput();
 
@@ -703,9 +666,9 @@ void bleremoteapp_shutdown(void)
     }
 #endif
 
-    if(wiced_ble_hidd_link_is_connected())
+    if(wiced_hidd_link_is_connected())
     {
-        wiced_ble_hidd_link_disconnect();
+        wiced_hidd_disconnect();
     }
     // Disable Interrupts
     wiced_hal_mia_enable_mia_interrupt(FALSE);
@@ -746,7 +709,7 @@ void bleremoteapp_connectButtonPressed(void)
 #ifdef CONNECTED_ADVERTISING_SUPPORTED
     blehidlink_allowDiscoverable();
 #else
-    WICED_BT_TRACE("Clear CCCD's \n");
+    WICED_BT_TRACE("\nClear CCCD's ");
     bleremoteapp_updateGattMapWithNotifications(0x0000);
     wiced_ble_hidd_link_virtual_cable_unplug();
 #endif
@@ -769,7 +732,7 @@ void bleremoteapp_connectButtonHandler(ConnectButtonPosition connectButtonPositi
     // The connect button was not pressed. Check if it is now pressed
     if (connectButtonPosition == CONNECT_BUTTON_DOWN)
     {
-        WICED_BT_TRACE("Connect Btn Pressed\n");
+        WICED_BT_TRACE("\nConnect Btn Pressed");
         bleremoteapp_connectButtonPressed();
     }
 }
@@ -818,7 +781,7 @@ void bleremoteapp_generateAndTxReports(void)
                     bleremoteapp_procEvtKey();
                     break;
                 case HID_EVENT_EVENT_FIFO_OVERFLOW:
-                    WICED_BT_TRACE("HID_EVENT_EVENT_FIFO_OVERFLOW\n");
+                    WICED_BT_TRACE("\nHID_EVENT_EVENT_FIFO_OVERFLOW");
                     // Call event queue error handler
                     bleremoteapp_procErrEvtQueue();
                     break;
@@ -1063,7 +1026,7 @@ void bleremoteapp_stdErrRespWithFwHwReset(void)
 ////////////////////////////////////////////////////////////////////////////////
 void bleremoteapp_procErrEvtQueue(void)
 {
-    WICED_BT_TRACE("KSQerr\n");
+    WICED_BT_TRACE("\nKSQerr");
     bleremoteapp_stdErrRespWithFwHwReset();
 }
 
@@ -1169,7 +1132,7 @@ void bleremoteapp_stdRptProcEvtKeyUp(uint8_t upDownFlag, uint8_t keyCode, uint8_
 /////////////////////////////////////////////////////////////////////////////////
 void bleremoteapp_stdRptProcOverflow(void)
 {
-    WICED_BT_TRACE("OverFlow\n");
+    WICED_BT_TRACE("\nOverFlow");
     bleremoteapp_stdErrRespWithFwHwReset();
 }
 
@@ -1226,7 +1189,7 @@ void bleremoteapp_bitRptSend(void)
 {
     // Flag that the bit mapped key report has not changed since it was sent the last time
     bleRemoteAppState->bitRptChanged = FALSE;
-    WICED_BT_TRACE("BitRpt\n");
+//    WICED_BT_TRACE("\nBitRpt");
 
     //set gatt attribute value here before sending the report
     memcpy(bleremote_bitmap_rpt, bleRemoteAppState->bitMappedReport.bitMappedKeys, bleRemoteAppState->bitReportSize);
@@ -1278,8 +1241,6 @@ void bleremoteapp_stdRptSend(void)
 /////////////////////////////////////////////////////////////////////////////////
 void bleremoteapp_userKeyPressDetected(void* unused)
 {
-    bleRemoteAppState->keyInterrupt_On = wiced_hal_keyscan_is_any_key_pressed();
-
     // Poll the app.
     bleremoteapp_pollReportUserActivity();
 }
@@ -1290,7 +1251,7 @@ void bleremoteapp_userKeyPressDetected(void* unused)
 /////////////////////////////////////////////////////////////////////////////////
 void bleremoteapp_batLevelChangeNotification(uint32_t newLevel)
 {
-    WICED_BT_TRACE("bat level changed to %d\n", newLevel);
+    WICED_BT_TRACE("\nbat level changed to %d", newLevel);
 
     {
         bleRemoteAppState->batRpt.level[0] = newLevel;
@@ -1310,7 +1271,7 @@ void bleremoteapp_batLevelChangeNotification(uint32_t newLevel)
 void bleremoteapp_stdRptRolloverSend(void)
 {
     // Tx rollover report
-    WICED_BT_TRACE("RollOverRpt\n");
+    WICED_BT_TRACE("\nRollOverRpt");
 
     //set gatt attribute value here before sending the report
     memcpy(bleremote_key_std_rpt, &(bleRemoteAppState->rolloverRpt.modifierKeys), bleRemoteAppState->stdRptSize);
@@ -1350,7 +1311,7 @@ void bleremoteapp_procErrKeyscan(void)
 #ifdef SUPPORT_TOUCHPAD
     AbsXYRptPtr tp;
 #endif
-    WICED_BT_TRACE("bleremoteapp_procErrKeyscan\n");
+    WICED_BT_TRACE("\nbleremoteapp_procErrKeyscan");
 
     //call base class handling
     bleremoteapp_stdErrRespWithFwHwReset();
@@ -1510,7 +1471,7 @@ void bleremoteapp_setReport(wiced_hidd_report_type_t reportType,
                      void *payload,
                      uint16_t payloadSize)
 {
-    WICED_BT_TRACE("bleremoteapp_setReport: %d\n", payloadSize);
+    WICED_BT_TRACE("\nbleremoteapp_setReport: %d", payloadSize);
 
 #ifdef SUPPORT_AUDIO
     //we only handle FEATURE report type
@@ -1530,7 +1491,7 @@ void bleremoteapp_setReport(wiced_hidd_report_type_t reportType,
     {
 #ifdef PTS_HIDS_CONFORMANCE_TC_CW_BV_03_C
         bleremote_connection_ctrl_rpt = *((uint8_t*)payload);
-        WICED_BT_TRACE("PTS_HIDS_CONFORMANCE_TC_CW_BV_03_C write val: %d \n", bleremote_connection_ctrl_rpt);
+        WICED_BT_TRACE("\nPTS_HIDS_CONFORMANCE_TC_CW_BV_03_C write val: %d ", bleremote_connection_ctrl_rpt);
 #endif
     }
     else if (reportType == WICED_HID_REPORT_TYPE_OUTPUT)
@@ -1541,7 +1502,7 @@ void bleremoteapp_setReport(wiced_hidd_report_type_t reportType,
             // Demux on report ID
             if(reportId == kbAppConfig.ledReportID)
             {
-                WICED_BT_TRACE("KB LED report\n");
+                WICED_BT_TRACE("\nKB LED report");
                 bleRemoteAppState->ledReport.ledStates = bleremote_output_rpt = *((uint8_t*)payload);
             }
         }
@@ -1930,14 +1891,14 @@ void bleremoteapp_pollReportUserActivity(void)
 
     // Check if we have any user activity.
     if (activitiesDetectedInLastPoll != BLEHIDLINK_ACTIVITY_NONE &&
-        !wiced_ble_hidd_link_is_connected())
+        !wiced_hidd_link_is_connected())
     {
         // ask the transport to connect.
         wiced_ble_hidd_link_connect();
     }
 
     // Check if the active transport is connected
-    if(wiced_ble_hidd_link_is_connected())
+    if(wiced_hidd_link_is_connected())
     {
         // Generate a report
         if(wiced_bt_hid_cfg_settings.security_requirement_mask)
@@ -2043,10 +2004,10 @@ void bleremoteapp_pollActivityKey(void)
     // Process all key events from the keyscan driver
     while (wiced_hal_keyscan_get_next_event(&bleRemoteAppState->kbKeyEvent.keyEvent))
     {
-        //WICED_BT_TRACE("keyCode=0x%x, upDown=%d\n", bleRemoteAppState->kbKeyEvent.keyEvent.keyCode, bleRemoteAppState->kbKeyEvent.keyEvent.upDownFlag);
+        //WICED_BT_TRACE("\nkeyCode=0x%x, upDown=%d", bleRemoteAppState->kbKeyEvent.keyEvent.keyCode, bleRemoteAppState->kbKeyEvent.keyEvent.upDownFlag);
 #ifdef CONNECTED_ADVERTISING_SUPPORTED
         // while in CONNECTED - advertising state, any key press shall terminate terminate advertising and go back to CONNECTED state
-        if (ble_hidd_link.second_conn_state && wiced_ble_hidd_link_is_connected() &&
+        if (ble_hidd_link.second_conn_state && wiced_hidd_link_is_connected() &&
             (bleRemoteAppState->kbKeyEvent.keyEvent.keyCode != END_OF_SCAN_CYCLE) && (bleRemoteAppState->kbKeyEvent.keyEvent.upDownFlag == KEY_DOWN))
         {
             wiced_bt_start_advertisements(BTM_BLE_ADVERT_OFF, 0, NULL);
@@ -2116,7 +2077,7 @@ void bleremoteapp_pollActivityKey(void)
                     }
                 }
                 //NOTE: if disconnected, any key press except connectbutton should trigger a reconnect attempt.
-                if (!wiced_ble_hidd_link_is_connected())
+                if (!wiced_hidd_link_is_connected())
                 {
                     wiced_hidd_event_queue_add_event_with_overflow(&bleRemoteAppState->appEventQueue,
                                 &bleRemoteAppState->eventNULL.eventInfo,
@@ -2180,7 +2141,7 @@ void bleremoteapp_pollActivityKey(void)
                     //re-enable app polling
                     wiced_ble_hidd_link_enable_poll_callback(WICED_TRUE);
 
-                    WICED_BT_TRACE("overflow = %d\n", wiced_hidd_mic_audio_is_overflow());
+                    WICED_BT_TRACE("\noverflow = %d", wiced_hidd_mic_audio_is_overflow());
                 }
             }
         }
@@ -2308,7 +2269,7 @@ void bleremoteapp_procEvtUserDefined(void)
                 //re-enable app polling
                 wiced_ble_hidd_link_enable_poll_callback(WICED_TRUE);
 
-                WICED_BT_TRACE("overflow = %d\n", wiced_hidd_mic_audio_is_overflow());
+                WICED_BT_TRACE("\noverflow = %d", wiced_hidd_mic_audio_is_overflow());
             }
             break;
 
@@ -2364,7 +2325,7 @@ void bleremoteapp_procEvtUserDefined(void)
                 //re-enable app polling
                 wiced_ble_hidd_link_enable_poll_callback(WICED_TRUE);
 
-                WICED_BT_TRACE("overflow = %d\n", wiced_hidd_mic_audio_is_overflow());
+                WICED_BT_TRACE("\noverflow = %d", wiced_hidd_mic_audio_is_overflow());
             }
 
             break;
@@ -2492,20 +2453,20 @@ void bleremoteApp_procEvtVoice(void)
 
     if (len > 0)
     {
-#ifdef ATT_MTU_SIZE_180
+ #ifdef ATT_MTU_SIZE_180
         //send audio out as one GATT MTU.
         memcpy(bleremote_voice_rpt, audio_outData, len);
         wiced_ble_hidd_link_send_report(audioPtr->reportId,WICED_HID_REPORT_TYPE_INPUT, bleremote_voice_rpt, len);
-#else
-#ifdef SBC_ENCODER
+ #else
+  #ifdef SBC_ENCODER
         //60 bytes data splits into 3 parts and sends out
         for(i=0; i<3; i++)
         {
             memcpy(bleremote_voice_rpt, &audio_outData[20*i], 20);
             wiced_ble_hidd_link_send_report(audioPtr->reportId,WICED_HID_REPORT_TYPE_INPUT, bleremote_voice_rpt, 20);
         }
-#endif
-#ifdef CELT_ENCODER
+  #endif
+  #ifdef CELT_ENCODER
         //89 bytes data splits into 5 parts and sends out
         for(i=0; i<4; i++)
         {
@@ -2514,8 +2475,8 @@ void bleremoteApp_procEvtVoice(void)
         }
         memcpy(bleremote_voice_rpt, &audio_outData[80], 9);
         wiced_ble_hidd_link_send_report(audioPtr->reportId,WICED_HID_REPORT_TYPE_INPUT, bleremote_voice_rpt, 9);
-#endif
-#ifdef ADPCM_ENCODER
+  #endif
+  #ifdef ADPCM_ENCODER
         //134 bytes data split into 7 parts and sends out
         for (i=0; i<6; i++)
         {
@@ -2524,8 +2485,8 @@ void bleremoteApp_procEvtVoice(void)
         }
         memcpy(bleremote_voice_rpt, &audio_outData[120], 14);
         wiced_ble_hidd_link_send_report(audioPtr->reportId,WICED_HID_REPORT_TYPE_INPUT, bleremote_voice_rpt, 14);
-#endif
-#endif
+  #endif
+ #endif
     }
 
     // We are done with this event. Delete it
@@ -2620,7 +2581,7 @@ void bleremoteapp_appActivityDetected(void *remApp)
 void bleremoteapp_transportStateChangeNotification(uint32_t newState)
 {
     int16_t flags;
-    WICED_BT_TRACE("Transport state changed to %d\n", newState);
+    WICED_BT_TRACE("\nTransport state changed to %d", newState);
 
     bleRemoteAppState->allowSDS = 0;
 
@@ -2630,15 +2591,15 @@ void bleremoteapp_transportStateChangeNotification(uint32_t newState)
     if(newState == BLEHIDLINK_CONNECTED)
     {
         //get host client configuration characteristic descriptor values
-        flags = wiced_ble_hidd_host_info_get_flags(ble_hidd_link.gatts_peer_addr, ble_hidd_link.gatts_peer_addr_type);
+        flags = wiced_hidd_host_get_flags(ble_hidd_link.gatts_peer_addr, ble_hidd_link.gatts_peer_addr_type);
         if(flags != -1)
         {
-            WICED_BT_TRACE("host config flag:%08x\n",flags);
+            WICED_BT_TRACE("\nhost config flag:%08x",flags);
             bleremoteapp_updateGattMapWithNotifications(flags);
         }
         else
         {
-            WICED_BT_TRACE("host NOT found!\n");
+            WICED_BT_TRACE("\nhost NOT found!");
         }
 
         // enable ghost detection
@@ -2696,7 +2657,7 @@ void bleremoteapp_transportStateChangeNotification(uint32_t newState)
 #ifdef SUPPORT_MOTION
         if (motionsensor)
         {
-            if (wiced_ble_hidd_host_info_is_bonded())
+            if (wiced_hidd_is_paired())
             {
                 // if it's bonded we want motion sensor to wake us up to try reconnect
                 motionsensor->enableInterrupt();
@@ -2748,9 +2709,9 @@ void bleremoteapp_ctrlPointWrite(wiced_hidd_report_type_t reportType,
                           void *payload,
                           uint16_t payloadSize)
 {
-    WICED_BT_TRACE("disconnecting\n");
+//    WICED_BT_TRACE("\ndisconnecting");
 
-    wiced_ble_hidd_link_disconnect();
+    wiced_hidd_disconnect();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2764,7 +2725,7 @@ void bleremoteapp_clientConfWriteRptStd(wiced_hidd_report_type_t reportType,
     uint8_t  notification = *(uint16_t *)payload & GATT_CLIENT_CONFIG_NOTIFICATION;
     //uint8_t  indication = *(uint16_t *)payload & GATT_CLIENT_CONFIG_INDICATION;
 
-    WICED_BT_TRACE("clientConfWriteRptStd\n");
+//    WICED_BT_TRACE("\nclientConfWriteRptStd");
 
     bleremoteapp_updateClientConfFlags(notification, KBAPP_CLIENT_CONFIG_NOTIF_STD_RPT);
 }
@@ -2780,7 +2741,7 @@ void bleremoteapp_clientConfWriteRptBitMapped(wiced_hidd_report_type_t reportTyp
     uint8_t  notification = *(uint16_t *)payload & GATT_CLIENT_CONFIG_NOTIFICATION;
     //uint8_t  indication = *(uint16_t *)payload & GATT_CLIENT_CONFIG_INDICATION;
 
-    WICED_BT_TRACE("clientConfWriteRptBitMapped\n");
+//    WICED_BT_TRACE("\nclientConfWriteRptBitMapped");
 
     bleremoteapp_updateClientConfFlags(notification, KBAPP_CLIENT_CONFIG_NOTIF_BIT_MAPPED_RPT);
 }
@@ -2796,7 +2757,7 @@ void bleremoteapp_clientConfWriteBatteryRpt(wiced_hidd_report_type_t reportType,
     uint8_t  notification = *(uint16_t *)payload & GATT_CLIENT_CONFIG_NOTIFICATION;
     //uint8_t  indication = *(uint16_t *)payload & GATT_CLIENT_CONFIG_INDICATION;
 
-    WICED_BT_TRACE("clientConfWriteBatteryRpt\n");
+//    WICED_BT_TRACE("\nclientConfWriteBatteryRpt");
 
     bleremoteapp_updateClientConfFlags(notification, KBAPP_CLIENT_CONFIG_NOTIF_BATTERY_RPT);
 }
@@ -2870,7 +2831,7 @@ void bleremoteapp_clientConfWriteRptTouchpad(wiced_hidd_report_type_t reportType
                                  uint16_t payloadSize)
 {
     uint8_t  notification = *(uint16_t *)payload & GATT_CLIENT_CONFIG_NOTIFICATION;
-    //WICED_BT_TRACE("\nbleremoteapp_clientConfWriteRptTouchpad: notification=%x, payload=%x\n", notification, *(uint16_t *)payload);
+    //WICED_BT_TRACE("\nbleremoteapp_clientConfWriteRptTouchpad: notification=%x, payload=%x", notification, *(uint16_t *)payload);
     bleremoteapp_updateClientConfFlags(notification, KBAPP_CLIENT_CONFIG_NOTIF_TOUCHPAD_RPT);
 }
 #endif
@@ -2880,7 +2841,7 @@ void bleremoteapp_clientConfWriteRptTouchpad(wiced_hidd_report_type_t reportType
 ////////////////////////////////////////////////////////////////////////////////
 void bleremoteapp_updateClientConfFlags(uint16_t enable, uint16_t featureBit)
 {
-    bleremoteapp_updateGattMapWithNotifications(wiced_ble_hidd_host_info_update_flags(ble_hidd_link.gatts_peer_addr, ble_hidd_link.gatts_peer_addr_type, enable,featureBit));
+    bleremoteapp_updateGattMapWithNotifications(wiced_hidd_host_set_flags(ble_hidd_link.gatts_peer_addr, enable, featureBit));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2922,101 +2883,55 @@ uint32_t bleremoteapp_sleep_handler(wiced_sleep_poll_type_t type )
 {
     uint32_t ret = WICED_SLEEP_NOT_ALLOWED;
 
-#ifndef  TESTING_USING_HCI
-    // Check if keys are pressed before deciding whether sleep is allowed
-    bleRemoteAppState->keyInterrupt_On = wiced_hal_keyscan_is_any_key_pressed();
-#endif
-
+#if SLEEP_ALLOWED
     switch(type)
     {
         case WICED_SLEEP_POLL_TIME_TO_SLEEP:
-            ret = WICED_SLEEP_MAX_TIME_TO_SLEEP;
-
             //if we are in the middle of keyscan recovery, no sleep
-            if (bleRemoteAppState->recoveryInProgress)
+            if (!bleRemoteAppState->recoveryInProgress
+ #ifdef SUPPORT_IR
+                && !irtxIsActive()
+ #endif
+ #ifdef SUPPORT_AUDIO
+                && !audioIsActive()
+ #endif
+ #if defined(SUPPORT_TOUCHPAD) && defined(HANDLE_STUCK_FINGER)
+                && !touchpadIsActive()
+ #endif
+ #ifdef SUPPORTING_FINDME
+                && bleremoteapp_isAlertIdle()
+ #endif
+               )
             {
-                ret = 0;
+ #if defined(CYW20735B1)
+                //app can do pre-SDS operation here when sleep time non-zero and pmu_attemptSleepState == PMU_SLEEP_SDS
+                if ( pmu_attemptSleepState == 5 )
+                {
+                    sfi_exit_deep_power_down(FALSE);
+                    sfi_enter_deep_power_down();
+                }
+ #endif
+                ret = WICED_SLEEP_MAX_TIME_TO_SLEEP;
             }
-
-#ifdef SUPPORT_IR
-            //if IR Tx is active, no sleep
-            if ( irtxIsActive() )
-            {
-                ret = 0;
-            }
-#endif
-#ifdef SUPPORT_AUDIO
-            //if audio is active, no sleep
-            if ( audioIsActive() )
-            {
-                ret = 0;
-            }
-#endif
-#if defined(SUPPORT_TOUCHPAD) && defined(HANDLE_STUCK_FINGER)
-            // sometimes TP fails to interrupt us when finger is up, causing
-            // touchpad->isActive() to be true and preventing sleep.
-            // Added HANDLE_STUCK_FINGER logic in touchPad code, now we should
-            // poll TP to determine sleep
-            if ( touchpadIsActive() )
-            {
-                ret = 0;
-            }
-#endif
-#ifdef SUPPORTING_FINDME
-            if (!bleremoteapp_isAlertIdle())
-            {
-                ret = 0;
-            }
-#endif
-
-#if defined(CYW20735B1)
-            //app can do pre-SDS operation here when sleep time non-zero and pmu_attemptSleepState == PMU_SLEEP_SDS
-            if ( ret && (pmu_attemptSleepState == 5))
-            {
-                sfi_exit_deep_power_down(FALSE);
-                sfi_enter_deep_power_down();
-            }
-#endif
             break;
 
         case WICED_SLEEP_POLL_SLEEP_PERMISSION:
+ #if SLEEP_ALLOWED > 1
             ret = WICED_SLEEP_ALLOWED_WITH_SHUTDOWN;
-
-            if (!bleRemoteAppState->allowSDS)
-            {
-                ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
-            }
-
-            //if key is not released, no Shut Down Sleep (SDS)
-            if (bleRemoteAppState->keyInterrupt_On)
-            {
-                ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
-            }
-
-#ifdef SUPPORT_TOUCHPAD
-            //if touch pad is actively sending tp data, no SDS
-            if ( touchpadIsActive() )
-            {
-                ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
-            }
-#endif
-
-#ifdef OTA_FIRMWARE_UPGRADE
-            if ( wiced_ota_fw_upgrade_is_active() )
-            {
-                ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
-            }
-#endif
-
-#if defined(SUPPORT_MOTION)
-            if ( motionIsActive())
-            {
-                ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
-            }
-#endif
+            // a key is down, no deep sleep
+            if (wiced_hal_keyscan_is_any_key_pressed()
+  #ifdef SUPPORT_TOUCHPAD
+                || touchpadIsActive()
+  #endif
+  #if defined(SUPPORT_MOTION)
+                || motionIsActive()
+  #endif
+               )
+ #endif
+            ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
             break;
-
     }
+#endif
 
     return ret;
 }
@@ -3086,7 +3001,7 @@ void bleremoteapp_alertBuz_timeout(uint32_t unused)
     // reached to timeout value.expired.
     if (appFindmeState->buz_on) // buz is on state
     {
-//WICED_BT_TRACE(" off\n");
+//WICED_BT_TRACE("\n off");
         bleremoteapp_alertBuzOff(appFindmeState->buz_id);
 
         appFindmeState->buz_on = 0;
@@ -3105,7 +3020,7 @@ void bleremoteapp_alertBuz_timeout(uint32_t unused)
     }
     else
     {
-//WICED_BT_TRACE(" on\n");
+//WICED_BT_TRACE("\n on");
         bleremoteapp_alertBuzOn(appFindmeState->buz_id);
 
         if (appAlert_cfg.alertBuzCfg[patten_id].buz_on_ms > 0)
@@ -3350,7 +3265,7 @@ uint8_t pollTouchpadActivity(void)
         // ignore touchpad events?
         if (!wiced_ble_hidd_link_is_discoverable())
         {
-            if (!wiced_ble_hidd_host_info_is_bonded())
+            if (!wiced_hidd_is_paired())
             {
                 if (!touchpad->proximityRpt())      // Don't use proximity finger event to initiate discovery
                 {
@@ -3363,7 +3278,7 @@ uint8_t pollTouchpadActivity(void)
                 {
                     if (!audioIsActive() && !motionIsEnabled())
                     {
-                        //WICED_BT_TRACE("\npollTouchpadActivity: dataAvailable=%d, prt=0x%x\n", dataAvailable, bleRemoteAppState->touchpadEvent.userDataPtr);
+                        //WICED_BT_TRACE("\npollTouchpadActivity: dataAvailable=%d, prt=0x%x", dataAvailable, bleRemoteAppState->touchpadEvent.userDataPtr);
                         wiced_hidd_event_queue_add_event_with_overflow(&bleRemoteAppState->appEventQueue,
                               &bleRemoteAppState->touchpadEvent.eventInfo,  sizeof(bleRemoteAppState->touchpadEvent),
                               bleRemoteAppState->pollSeqn);
@@ -3371,7 +3286,7 @@ uint8_t pollTouchpadActivity(void)
                         return BLEHIDLINK_ACTIVITY_REPORTABLE;
                     }
                 }
-                return (wiced_ble_hidd_link_is_connected() && !touchpad->proximityRpt())?
+                return (wiced_hidd_link_is_connected() && !touchpad->proximityRpt())?
                     BLEHIDLINK_ACTIVITY_NONE : BLEHIDLINK_ACTIVITY_REPORTABLE;
             }
         }
@@ -3391,17 +3306,17 @@ uint8_t handleTouchpadVirtualKey(HidEventKey * ke)
     uint8_t isDown = ke->keyEvent.upDownFlag == KEY_DOWN;
     if (isDown)
     {
-        //WICED_BT_TRACE("\ngettin zone\n", zone);
+        //WICED_BT_TRACE("\ngettin zone", zone);
         zone = touchpad->getZone();
     }
     // we translate the key if valid zone found
     if (zone == ZONE_UNDEFINED)
     {
-        WICED_BT_TRACE("%s no zone\n", isDown?"DN":"UP");
+        WICED_BT_TRACE("\n%s no zone", isDown?"DN":"UP");
         return FALSE;
     }
     ke->keyEvent.keyCode = zone + VIRUAL_KEY_INDEX_BASE;
-    WICED_BT_TRACE("%s zone=%d\n", isDown?"DN":"UP", zone);
+    WICED_BT_TRACE("\n%s zone=%d", isDown?"DN":"UP", zone);
     return TRUE;
 }
 
@@ -3427,12 +3342,12 @@ void bleremoteapp_procEvtTouchpad(void)
 ////////////////////////////////////////////////////////////////////////////////
 void bleremoteapp_ota_fw_upgrade_status(uint8_t status)
 {
-    WICED_BT_TRACE("OTAFU status:%d\n", status);
+    WICED_BT_TRACE("\nOTAFU status:%d", status);
 
     switch (status)
     {
     case OTA_FW_UPGRADE_STATUS_STARTED:             // Client started OTA firmware upgrade process
-        WICED_BT_TRACE("allow slave latency 0\n");
+        WICED_BT_TRACE("\nallow slave latency 0");
         wiced_blehidd_allow_slave_latency(FALSE);
         break;
 
@@ -3444,7 +3359,7 @@ void bleremoteapp_ota_fw_upgrade_status(uint8_t status)
             if (!audioIsActive())
 #endif
             {
-                WICED_BT_TRACE("allow slave latency 1\n");
+                WICED_BT_TRACE("\nallow slave latency 1");
                 wiced_blehidd_allow_slave_latency(TRUE);
             }
         break;

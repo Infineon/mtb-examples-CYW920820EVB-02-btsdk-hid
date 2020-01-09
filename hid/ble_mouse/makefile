@@ -1,5 +1,5 @@
 #
-# Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+# Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
 # Cypress Semiconductor Corporation. All Rights Reserved.
 #
 # This software, including source code, documentation and related
@@ -109,12 +109,34 @@ CY_APP_PATCH_LIBS += wiced_hidd_lib.a
 # Use ENABLE_MOTION=1 to enable motion
 #
 # defaults if not overridden on the command line:
-TESTING_USING_HCI_DEFAULT=0
+ref?=0
+ifeq ($(ref),1)
+ TARGET=CYW920819REF-MS-01
+ SUPPORTED_TARGETS += CYW920819REF-MS-01
+ TARGET_DEVICE_MAP += CYW920819REF-MS-01/20819A1
+endif
+
+ifeq ($(TARGET), CYW920819REF-MS-01)
+ TESTING_USING_HCI_DEFAULT=0
+ ENABLE_SCROLL_DEFAULT=1
+else
+ TESTING_USING_HCI_DEFAULT=1
+ ENABLE_SCROLL_DEFAULT=0
+endif
 OTA_FW_UPGRADE_DEFAULT=1
 OTA_SEC_FW_UPGRADE_DEFAULT=0
-ENABLE_SCROLL_DEFAULT=1
 ENABLE_MOTION_DEFAULT=1
 ASSYMETRIC_SLAVE_LATENCY_DEFAULT=0
+# SLEEP_ALLOWED
+#  SLEEP_ALLOWED_DEFAULT=0  Disable sleep function
+#  SLEEP_ALLOWED_DEFAULT=1  Allow sleep without shutdown
+#  SLEEP_ALLOWED_DEFAULT=2  Allow sleep with shutdown
+SLEEP_ALLOWED_DEFAULT=2
+# LED
+#  LED_DEFAULT=0  Disable LED functions (Good for power consumption measurement)
+#  LED_DEFAULT=1  Use LED for status indication
+#  LED_DEFAULT=2  Use PWM LED, allows to control brightness of LED in percentage
+LED_SUPPORT_DEFAULT=1
 
 XIP?=xip
 BT_DEVICE_ADDRESS?=default
@@ -125,13 +147,21 @@ OTA_SEC_FW_UPGRADE ?= $(OTA_SEC_FW_UPGRADE_DEFAULT)
 ENABLE_SCROLL ?= $(ENABLE_SCROLL_DEFAULT)
 ENABLE_MOTION ?= $(ENABLE_MOTION_DEFAULT)
 ASSYMETRIC_SLAVE_LATENCY ?= $(ASSYMETRIC_SLAVE_LATENCY_DEFAULT)
+SLEEP_ALLOWED ?= $(SLEEP_ALLOWED_DEFAULT)
+LED ?= $(LED_SUPPORT_DEFAULT)
 
 #
 # App defines
 #
 CY_APP_DEFINES = \
   -DWICED_BT_TRACE_ENABLE \
-  -DLE_HIDD_ONLY
+  -DBLE_SUPPORT \
+  -DLED_SUPPORT=$(LED) \
+  -DSLEEP_ALLOWED=$(SLEEP_ALLOWED)
+
+ifeq ($(TARGET), CYW920819REF-MS-01)
+ CY_APP_DEFINES += -DMOUSE_PLATFORM
+endif
 
 ifeq ($(TESTING_USING_HCI),1)
  CY_APP_DEFINES += -DTESTING_USING_HCI

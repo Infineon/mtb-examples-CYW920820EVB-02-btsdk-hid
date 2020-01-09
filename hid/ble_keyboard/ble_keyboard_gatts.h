@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -33,7 +33,6 @@
 
 #ifndef _BLEKB_GATTS_H
 #define _BLEKB_GATTS_H
-#include "blehidgatts.h"
 
 /******************************************************************************
  *                         Type Definitions
@@ -41,66 +40,68 @@
 typedef enum
 {
     HANDLE_BLEKB_GATT_SERVICE = 0x1, // service handle
+        HANDLE_BLEKB_GATT_SERVICE_CHANGED,
+        HANDLE_BLEKB_GATT_SERVICE_CHANGED_VAL,
 
     HANDLE_BLEKB_GAP_SERVICE = 0x14, // service handle
-        HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_NAME, // characteristic handl
-        HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_NAME_VAL, // char value handle
+        HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_NAME, // 0x15 characteristic handl
+        HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_NAME_VAL, // 0x16 char value handle
 
-        HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_APPEARANCE, // characteristic handl
-        HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_APPEARANCE_VAL,// char value handle
+        HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_APPEARANCE, // 0x17 characteristic handl
+        HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_APPEARANCE_VAL,// 0x18 char value handle
 
-        HANDLE_BLEKB_GAP_SERVICE_CHAR_PERI_PREFER_CONNPARAM, // characteristic handl
-        HANDLE_BLEKB_GAP_SERVICE_CHAR_PERI_PREFER_CONNPARAM_VAL,// char value handle
+        HANDLE_BLEKB_GAP_SERVICE_CHAR_PERI_PREFER_CONNPARAM, // 0x19 characteristic handl
+        HANDLE_BLEKB_GAP_SERVICE_CHAR_PERI_PREFER_CONNPARAM_VAL,// 0x1a char value handle
 
     HANDLE_BLEKB_DEV_INFO_SERVICE = 0x28,
-        HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_PNP_ID, // characteristic handle
-        HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_PNP_ID_VAL,// char value handle
+        HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_PNP_ID, // 0x29 characteristic handle
+        HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_PNP_ID_VAL,// 0x2a char value handle
 
-        HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_MFR_NAME, // characteristic handle
-        HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_MFR_NAME_VAL,// char value handle
+        HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_MFR_NAME, // 0x2b characteristic handle
+        HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_MFR_NAME_VAL,// 0x2c char value handle
 
     HANDLE_BLEKB_BATTERY_SERVICE = 0x30, // service handle
-        HANDLE_BLEKB_BATTERY_SERVICE_CHAR_LEVEL, // characteristic handl
-        HANDLE_BLEKB_BATTERY_SERVICE_CHAR_LEVEL_VAL, // char value handle
-        HANDLE_BLEKB_BATTERY_SERVICE_CHAR_CFG_DESCR, // charconfig desc handl
-        HANDLE_BLEKB_BATTERY_SERVICE_RPT_REF_DESCR, // char desc handl
+        HANDLE_BLEKB_BATTERY_SERVICE_CHAR_LEVEL, // 0x31 characteristic handl
+        HANDLE_BLEKB_BATTERY_SERVICE_CHAR_LEVEL_VAL, // 0x32 char value handle
+        HANDLE_BLEKB_BATTERY_SERVICE_CHAR_CFG_DESCR, // 0x33 charconfig desc handl
+        HANDLE_BLEKB_BATTERY_SERVICE_RPT_REF_DESCR, // 0x34 char desc handl
 
     HANDLE_BLEKB_SCAN_PARAM_SERVICE = 0x40, // service handle
-        HANDLE_BLEKB_SCAN_PARAM_SERVICE_CHAR_SCAN_INT_WINDOW, // characteristic handl
-        HANDLE_BLEKB_SCAN_PARAM_SERVICE_CHAR_SCAN_INT_WINDOW_VAL, // char value handle
+        HANDLE_BLEKB_SCAN_PARAM_SERVICE_CHAR_SCAN_INT_WINDOW, // 0x41 characteristic handl
+        HANDLE_BLEKB_SCAN_PARAM_SERVICE_CHAR_SCAN_INT_WINDOW_VAL, // 0x42 char value handle
 
     HANDLE_BLEKB_LE_HID_SERVICE = 0x4F, // service handle
-        HANDLE_BLEKB_LE_HID_SERVICE_INC_BAS_SERVICE,    //include service
+        HANDLE_BLEKB_LE_HID_SERVICE_INC_BAS_SERVICE,    // 0x50 include service
 
-        HANDLE_BLEKB_LE_HID_SERVICE_PROTO_MODE,         // characteristic handl
-        HANDLE_BLEKB_LE_HID_SERVICE_PROTO_MODE_VAL,     // char value handle
+        HANDLE_BLEKB_LE_HID_SERVICE_PROTO_MODE,         // 0x51 characteristic handle
+        HANDLE_BLEKB_LE_HID_SERVICE_PROTO_MODE_VAL,     // 0x52 char value handle
 
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_INFO,         // characteristic handl
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_INFO_VAL,     // char value handle
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_INFO,         // 0x53 characteristic handle
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_INFO_VAL,     // 0x54 char value handle
 
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_BT_KB_INPUT,         // characteristic handl
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_BT_KB_INPUT_VAL,     // char value handle
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_BT_KB_INPUT_CHAR_CFG_DESCR, // charconfig desc handl
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_BT_KB_INPUT,         // 0x55 characteristic handle
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_BT_KB_INPUT_VAL,     // 0x56 char value handle
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_BT_KB_INPUT_CHAR_CFG_DESCR, // 0x57 charconfig desc handle
 
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_BT_KB_OUTPUT,         // characteristic handl
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_BT_KB_OUTPUT_VAL,     // char value handle
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_BT_KB_OUTPUT,         // 0x58 characteristic handle
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_BT_KB_OUTPUT_VAL,     // 0x59 char value handle
 
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_MAP,         // characteristic handl
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_MAP_VAL,     // char value handle
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_MAP,         // 0x5a characteristic handle
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_MAP_VAL,     // 0x5b char value handle
 
-        HANDLE_BLEKB_LE_HID_SERVICE_EXT_RPT_REF_DESCR, // char desc handl
+        HANDLE_BLEKB_LE_HID_SERVICE_EXT_RPT_REF_DESCR, // 0x60 char desc handl
 
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_INPUT,         // characteristic handl
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_INPUT_VAL,     // char value handle
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_INPUT_CHAR_CFG_DESCR, //charconfig desc handl
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_INPUT_RPT_REF_DESCR, // char desc handl
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_INPUT,         // 0x61 characteristic handl
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_INPUT_VAL,     // 0x62 char value handle
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_INPUT_CHAR_CFG_DESCR, // 0x63 charconfig desc handl
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_INPUT_RPT_REF_DESCR, // 0x64 char desc handl
 
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_OUTPUT,         // characteristic handl
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_OUTPUT_VAL,     // char value handle
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_OUTPUT_RPT_REF_DESCR, // char desc handl
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_OUTPUT,         // 0x65 characteristic handl
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_OUTPUT_VAL,     // 0x66 char value handle
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_STD_OUTPUT_RPT_REF_DESCR, // 0x67 char desc handl
 
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_BITMAP,         // characteristic handl
-        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_BITMAP_VAL,     // char value handle
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_BITMAP,         // 0x68 characteristic handl
+        HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_BITMAP_VAL,     // 0x69 char value handle
         HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_BITMAP_CHAR_CFG_DESCR, //charconfig desc handl
         HANDLE_BLEKB_LE_HID_SERVICE_HID_RPT_BITMAP_RPT_REF_DESCR, // char desc handl
 
@@ -129,5 +130,6 @@ typedef enum
 
 extern const char  dev_local_name[];
 
+//const unsigned int blehid_rpt_map_size;
 
 #endif //_BLEKB_GATTS_H

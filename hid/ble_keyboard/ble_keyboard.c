@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -65,7 +65,7 @@
 *
 * In case you don't have the right hardware, eval_keyboard, which is required to support the 8*18
 * key matrix used in the BLE keyboard application, you will need to modify the key matrix to match your hardware.
-
+*
 * You can also use the WICED board to simulate keyboard by using ClientControl tool
 * test the basic BLE functions.
 * NOTE: To use Client Control, make sure you use "TESTING_USING_HCI=1" in application settings.
@@ -103,9 +103,8 @@
 #include "wiced_hal_aclk.h"
 #include "wiced_hal_pwm.h"
 #endif
-//////////////////////////////////////////////////////////////////////////////
-//                      local interface declaration
-//////////////////////////////////////////////////////////////////////////////
+#include "blehidlink.h"
+#include "hidd_lib.h"
 
 #ifdef OTA_FIRMWARE_UPGRADE
 #include "wiced_bt_ota_firmware_upgrade.h"
@@ -144,7 +143,6 @@ wiced_bool_t wiced_ota_fw_upgrade_is_active(void);
 tKbAppState ble_keyboard_application_state = {0, };
 tKbAppState *kbAppState = &ble_keyboard_application_state;
 
-
 uint16_t  characteristic_client_configuration[MAX_NUM_CLIENT_CONFIG_NOTIF] = {0,};
 uint8_t   kbapp_protocol = PROTOCOL_REPORT;
 uint8_t   battery_level = 100;
@@ -156,18 +154,21 @@ uint8_t blekb_sleep_rpt = 0;
 uint8_t blekb_scroll_rpt = 0;
 uint8_t blekb_func_lock_rpt =0;
 uint8_t blekb_connection_ctrl_rpt = 0;
+uint8_t blinkingStartup = 1;
 
 uint8_t firstTransportStateChangeNotification = 1;
-wiced_timer_t blekb_allow_sleep_timer;
 wiced_timer_t blekb_conn_param_update_timer;
 
 PLACE_DATA_IN_RETENTION_RAM uint8_t  kbapp_funcLock_state; // function lock state
+
+#ifdef KBD_DEBUG
+int sleep = 0;
+#endif
 
 extern KbAppConfig kbAppConfig;
 extern KbKeyConfig kbKeyConfig[];
 extern uint8_t kbKeyConfig_size;
 extern wiced_bool_t blehidlink_connection_param_updated;
-extern UINT16 wiced_bt_buffer_poolutilization (UINT8 pool_id);
 
 wiced_blehidd_report_gatt_characteristic_t reportModeGattMap[] =
 {
@@ -251,7 +252,28 @@ KbFuncLockDepKeyTransTab kbFuncLockDepKeyTransTab[KB_MAX_FUNC_LOCK_DEP_KEYS] =
 void blekbapp_ota_fw_upgrade_status(uint8_t status);
 #endif
 
+#ifdef KEYBOARD_PLATFORM
+ #define keyscanActive() (wiced_hal_keyscan_is_any_key_pressed() || wiced_hal_keyscan_events_pending())
+#else
+ #define keyscanActive() 0
+#endif
 
+#ifdef KBD_DEBUG
+void _trigger(int p, int n)
+{
+    wiced_hal_gpio_configure_pin(p, GPIO_OUTPUT_ENABLE, 0);
+    wiced_hal_gpio_set_pin_output(p, 0);
+    while (n--)
+    {
+        wiced_hal_gpio_set_pin_output(p, 1);
+        wiced_hal_gpio_set_pin_output(p, 0);
+    }
+}
+
+#define trigger(n) _trigger(DEBUG_TRIGGER,n)
+#else
+#define trigger(n)
+#endif
 /////////////////////////////////////////////////////////////////////////////////////////////
 /// set up LE Advertising data
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -286,16 +308,6 @@ void kbapp_setUpAdvData(void)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// This function is the timeout handler for allow_sleep_timer
-////////////////////////////////////////////////////////////////////////////////
-void kbapp_allowsleep_timeout( uint32_t arg )
-{
-    WICED_BT_TRACE("allow SDS\n");
-
-    kbAppState->allowSDS = WICED_TRUE;
-}
-
-////////////////////////////////////////////////////////////////////////////////
 /// This function is the timeout handler for conn_param_update_timer
 ////////////////////////////////////////////////////////////////////////////////
 void kbapp_connparamupdate_timeout( uint32_t arg )
@@ -321,13 +333,30 @@ void kbapp_connparamupdate_timeout( uint32_t arg )
     }
 }
 
+/* This is the pairing button interrupt handler */
+static void pairing_button_interrupt_handler( void* user_data, uint8_t pin )
+{
+    int pin_status = wiced_hal_gpio_get_pin_input_status(pin); // pin pulled high, button press shorting to ground. Thus 1:UP, 0:Down
+    WICED_BT_TRACE("\nint:%c", pin_status ? 'U' : 'D');
+    kbapp_connectButtonHandler(pin_status ? CONNECT_BUTTON_UP : CONNECT_BUTTON_DOWN);
+}
+
+#if 0
+extern void wiced_postSleep_register_AppCB(void (*cb)(void));
+void postSleep_wakup(void)
+{
+    trigger(1);
+}
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 /// This function will be called from blehid_app_init() during start up.
 /////////////////////////////////////////////////////////////////////////////////////////////
 void blekbapp_create(void)
 {
-    WICED_BT_TRACE("KBCreated\n");
+    trigger(4);
+
+    WICED_BT_TRACE("\nKBCreate");
 
     //battery monitoring configuraion
     wiced_hal_batmon_config(ADC_INPUT_VDDIO,    // ADC input pin
@@ -343,7 +372,7 @@ void blekbapp_create(void)
 
 
 
-#ifndef  TESTING_USING_HCI
+#ifdef KEYBOARD_PLATFORM
     wiced_hal_keyscan_configure(NUM_KEYSCAN_ROWS, NUM_KEYSCAN_COLS);
     wiced_hal_keyscan_init();
 #endif
@@ -376,15 +405,17 @@ void blekbapp_create(void)
     scroll_init();
 #endif
 
-    kbapp_LED_init();
-
     wiced_hidd_event_queue_init(&kbAppState->eventQueue, (uint8_t *)wiced_memory_permanent_allocate(kbAppConfig.maxEventNum * kbAppConfig.maxEventSize),
                     kbAppConfig.maxEventSize, kbAppConfig.maxEventNum);
 
-
+#ifndef KEYBOARD_PLATFORM
+    WICED_BT_TRACE("\nRegister p%d for connect button", PAIR_BUTTON);
+    wiced_platform_register_button_callback(PAIR_BUTTON_IDX, pairing_button_interrupt_handler, NULL, WICED_PLATFORM_BUTTON_BOTH_EDGE);
+#endif
     kbapp_init();
 
-    WICED_BT_TRACE("Free RAM bytes=%d bytes\n", wiced_memory_get_free_bytes());
+    WICED_BT_TRACE("\nFree RAM bytes=%d bytes", wiced_memory_get_free_bytes());
+//    trigger(3);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -398,9 +429,6 @@ void kbapp_init(void)
                                         wiced_bt_hid_cfg_settings.ble_scan_cfg.conn_supervision_timeout);//600 * 10=600ms=6 seconds
 
     kbapp_setUpAdvData();
-
-    //timer to allow ShutDown Sleep (SDS)
-    wiced_init_timer( &blekb_allow_sleep_timer, kbapp_allowsleep_timeout, 0, WICED_MILLI_SECONDS_TIMER );
 
     //timer to request connection param update
     wiced_init_timer( &blekb_conn_param_update_timer, kbapp_connparamupdate_timeout, 0, WICED_MILLI_SECONDS_TIMER );
@@ -417,19 +445,18 @@ void kbapp_init(void)
     // and round up to the next largest integer
     kbAppState->bitReportSize = (kbAppConfig.numBitMappedKeys + 7)/8;
 
-#ifndef  TESTING_USING_HCI
+#ifdef KEYBOARD_PLATFORM
     wiced_hal_keyscan_register_for_event_notification(kbapp_userKeyPressDetected, NULL);
-#endif
-#ifdef __BLEKB_SCROLL_REPORT__
+ #ifdef __BLEKB_SCROLL_REPORT__
     wiced_hal_quadrature_register_for_event_notification(kbapp_userScrollDetected, NULL);
+ #endif
 #endif
 
-     // Set initial func-lock state for power on reset
+    // Set initial func-lock state for power on reset
     if (wiced_hal_mia_is_reset_reason_por())
     {
         kbapp_funcLock_state = kbAppState->funcLockInfo.state = kbAppConfig.defaultFuncLockState;
     }
-
 
     // Set func lock key as up
     kbAppState->funcLockInfo.kepPosition = FUNC_LOCK_KEY_UP;
@@ -468,7 +495,7 @@ void kbapp_init(void)
 
     wiced_ble_hidd_link_register_poll_callback(kbapp_pollReportUserActivity);
 
-    wiced_ble_hidd_link_register_sleep_permit_handler(kbapp_sleep_handler);
+    wiced_hidd_link_register_sleep_permit_handler(kbapp_sleep_handler);
 
     wiced_blehidd_register_report_table(reportModeGattMap, sizeof(reportModeGattMap)/sizeof(reportModeGattMap[0]));
 
@@ -476,7 +503,7 @@ void kbapp_init(void)
     wiced_hal_mia_notificationRegisterQuad();
 #endif
 
-    wiced_ble_hidd_link_init();
+    wiced_hidd_link_init();
 
     wiced_hal_mia_enable_mia_interrupt(TRUE);
     wiced_hal_mia_enable_lhl_interrupt(TRUE);//GPIO interrupt
@@ -487,7 +514,7 @@ void kbapp_init(void)
 ////////////////////////////////////////////////////////////////////////////////
 void kbapp_shutdown(void)
 {
-    WICED_BT_TRACE("kbapp_shutdown\n");
+    WICED_BT_TRACE("\nkbapp_shutdown");
 
     kbapp_flushUserInput();
 
@@ -496,13 +523,13 @@ void kbapp_shutdown(void)
     scroll_turnOff();
 #endif
 
-#ifndef  TESTING_USING_HCI
+#ifdef KEYBOARD_PLATFORM
     // Disable key detection
     wiced_hal_keyscan_turnOff();
 #endif
 
-    if(wiced_ble_hidd_link_is_connected())
-        wiced_ble_hidd_link_disconnect();
+    if(wiced_hidd_link_is_connected())
+        wiced_hidd_disconnect();
 
     // Disable Interrupts
     wiced_hal_mia_enable_mia_interrupt(FALSE);
@@ -519,7 +546,7 @@ void kbapp_pollReportUserActivity(void)
 
     kbAppState->pollSeqn++;
 
-    if((kbAppState->pollSeqn % 64) == 0)
+    if((kbAppState->pollSeqn % 128) == 0)
     {
         WICED_BT_TRACE(".");
     }
@@ -528,23 +555,17 @@ void kbapp_pollReportUserActivity(void)
 
     // If there was an activity and the transport is not connected
     if (activitiesDetectedInLastPoll != BLEHIDLINK_ACTIVITY_NONE &&
-        !wiced_ble_hidd_link_is_connected())
+        !wiced_hidd_link_is_connected())
     {
         // ask the transport to connect.
-        wiced_ble_hidd_link_connect();
+        wiced_hidd_link_connect();
     }
 
-    if(wiced_ble_hidd_link_is_connected())
+    if(wiced_hidd_link_is_connected())
     {
         // Generate a report
-        if(wiced_bt_hid_cfg_settings.security_requirement_mask)
-        {
-            if (wiced_blehidd_is_link_encrypted())
-            {
-                kbapp_generateAndTxReports();
-            }
-        }
-        else
+        if(!wiced_bt_hid_cfg_settings.security_requirement_mask ||
+           (wiced_bt_hid_cfg_settings.security_requirement_mask && wiced_hidd_link_is_encrypted()))
         {
             kbapp_generateAndTxReports();
         }
@@ -564,6 +585,8 @@ void kbapp_pollReportUserActivity(void)
 ////////////////////////////////////////////////////////////////////////////////
 uint8_t kbapp_pollActivityUser(void)
 {
+    trigger(2);
+
     // Poll the hardware for events
     wiced_hal_mia_pollHardware();
 
@@ -592,7 +615,7 @@ uint8_t kbapp_pollActivityUser(void)
 /////////////////////////////////////////////////////////////////////////////////
 void kbapp_pollActivityKey(void)
 {
-#ifndef  TESTING_USING_HCI
+#ifdef KEYBOARD_PLATFORM
     uint8_t suppressEndScanCycleAfterConnectButton;
 
     // Assume that end-of-cycle event suppression is on
@@ -630,6 +653,15 @@ void kbapp_pollActivityKey(void)
             }
             else
             {
+#ifdef KBD_DEBUG
+                if (kbAppState->keyEvent.keyEvent.keyCode == 18 && kbAppState->keyEvent.keyEvent.upDownFlag == KEY_DOWN)
+                {
+                    sleep = !sleep;
+                    WICED_BT_TRACE("\nSleep is %s",  sleep ? "on" : "off" );
+                }
+#endif
+
+                WICED_BT_TRACE("\nkc:%d %c", kbAppState->keyEvent.keyEvent.keyCode, kbAppState->keyEvent.keyEvent.upDownFlag == KEY_DOWN ? 'D':'U');
                 // No. Queue the key event
                 wiced_hidd_event_queue_add_event_with_overflow(&kbAppState->eventQueue, &kbAppState->keyEvent.eventInfo, sizeof(kbAppState->keyEvent), kbAppState->pollSeqn);
 
@@ -768,7 +800,7 @@ void kbapp_connectButtonHandler(ConnectButtonPosition connectButtonPosition)
     // The connect button was not pressed. Check if it is now pressed
     if (connectButtonPosition == CONNECT_BUTTON_DOWN)
     {
-        WICED_BT_TRACE("Connect Btn Pressed\n");
+        WICED_BT_TRACE("\nConnect Btn Pressed");
         kbapp_connectButtonPressed();
     }
 }
@@ -783,7 +815,18 @@ void kbapp_connectButtonHandler(ConnectButtonPosition connectButtonPosition)
 /////////////////////////////////////////////////////////////////////////////////
 void kbapp_connectButtonPressed(void)
 {
-    wiced_ble_hidd_link_virtual_cable_unplug();
+    //bt handle
+    // Generate VC unplug to BT transport if configured to do so
+//    if (VC_UNPLUG_ON_CONNECT_BUTTON_PRESS)
+    {
+        wiced_hidd_link_virtual_cable_unplug();
+    }
+
+    // Tell BT transport to become discoverable if configured to do so
+//    if (BECOME_DISCOVERABLE_ON_CONNECT_BUTTON_PRESS)
+    {
+        wiced_hidd_enter_pairing();
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -1222,7 +1265,7 @@ void kbapp_stdErrRespWithFwHwReset(void)
     // Flush the event fifo
     wiced_hidd_event_queue_flush(&kbAppState->eventQueue);
 
-#ifndef  TESTING_USING_HCI
+#ifdef KEYBOARD_PLATFORM
     // Reset the keyscan HW
     wiced_hal_keyscan_reset();
 
@@ -1238,7 +1281,7 @@ void kbapp_stdErrRespWithFwHwReset(void)
 ////////////////////////////////////////////////////////////////////////////////
 void kbapp_procErrKeyscan(void)
 {
-    WICED_BT_TRACE("KSErr\n");
+    WICED_BT_TRACE("\nKSErr");
     kbapp_stdErrRespWithFwHwReset();
 }
 
@@ -1251,7 +1294,7 @@ void kbapp_procErrKeyscan(void)
 ////////////////////////////////////////////////////////////////////////////////
 void kbapp_procErrEvtQueue(void)
 {
-    WICED_BT_TRACE("KSQerr\n");
+    WICED_BT_TRACE("\nKSQerr");
     kbapp_stdErrRespWithFwHwReset();
 }
 
@@ -1304,7 +1347,7 @@ void kbapp_stdErrResp(void)
 void kbapp_stdRptRolloverSend(void)
 {
     // Tx rollover report
-    WICED_BT_TRACE("RollOverRpt\n");
+    WICED_BT_TRACE("\nRollOverRpt");
 
     //set gatt attribute value here before sending the report
     memcpy(blekb_key_std_rpt, &(kbAppState->rolloverRpt.modifierKeys), kbAppState->stdRptSize);
@@ -1416,7 +1459,7 @@ void kbapp_stdRptProcEvtKeyUp(uint8_t upDownFlag, uint8_t keyCode, uint8_t trans
 /////////////////////////////////////////////////////////////////////////////////
 void kbapp_stdRptProcOverflow(void)
 {
-    WICED_BT_TRACE("OverFlow\n");
+    WICED_BT_TRACE("\nOverFlow");
     kbapp_stdErrRespWithFwHwReset();
 }
 
@@ -1518,7 +1561,7 @@ void kbapp_scrollRptSend(void)
 {
     // Flag that the scroll report has not changed since it was sent the last time
     kbAppState->scrollRptChanged = FALSE;
-    WICED_BT_TRACE("ScrollRpt\n");
+    WICED_BT_TRACE("\nScrollRpt");
 
     //set gatt attribute value here before sending the report
     if (kbAppState->scrollReport.motionAxis0>0)
@@ -1545,7 +1588,7 @@ void kbapp_funcLockRptSend(void)
 {
     // Flag that the func-lock report has not changed since it was sent the last time
     kbAppState->funcLockRptChanged = FALSE;
-    WICED_BT_TRACE("FuncLockRpt\n");
+//    WICED_BT_TRACE("\nFuncLockRpt");
 
     //set gatt attribute value here before sending the report
     blekb_func_lock_rpt = kbAppState->funcLockRpt.status;
@@ -1562,7 +1605,7 @@ void kbapp_slpRptSend(void)
 {
     // Flag that the sleep report has not changed since it was sent the last time
     kbAppState->slpRptChanged = FALSE;
-    WICED_BT_TRACE("SleepRpt\n");
+//    WICED_BT_TRACE("\nSleepRpt");
     //set gatt attribute value here before sending the report
     blekb_sleep_rpt = kbAppState->slpRpt.sleepVal;
 
@@ -1578,7 +1621,7 @@ void kbapp_bitRptSend(void)
 {
     // Flag that the bit mapped key report has not changed since it was sent the last time
     kbAppState->bitRptChanged = FALSE;
-    WICED_BT_TRACE("BitRpt\n");
+//    WICED_BT_TRACE("\nBitRpt");
 
     //set gatt attribute value here before sending the report
     memcpy(blekb_bitmap_rpt, kbAppState->bitMappedReport.bitMappedKeys, kbAppState->bitReportSize);
@@ -1594,7 +1637,7 @@ void kbapp_bitRptSend(void)
 /////////////////////////////////////////////////////////////////////////////////
 void kbapp_batRptSend(void)
 {
-    //WICED_BT_TRACE("BASRpt\n");
+    //WICED_BT_TRACE("\nBASRpt");
 
     //set gatt attribute value here before sending the report
     battery_level = kbAppState->batRpt.level[0];
@@ -1630,18 +1673,14 @@ void kbapp_stdRptSend(void)
 // Keyscan interrupt
 void kbapp_userKeyPressDetected(void* unused)
 {
-    //WICED_BT_TRACE("kbapp_userKeyPressDetected\n");
-    kbAppState->keyInterrupt_On = wiced_hal_keyscan_is_any_key_pressed();
-
     // Poll the app.
     kbapp_pollReportUserActivity();
 }
 
-
 // Scroll/Quadrature interrupt
 void kbapp_userScrollDetected(void* unused)
 {
-    //WICED_BT_TRACE("kbapp_userScrollDetected\n");
+    //WICED_BT_TRACE("\nkbapp_userScrollDetected");
     //Poll the app.
     kbapp_pollReportUserActivity();
 }
@@ -1649,15 +1688,9 @@ void kbapp_userScrollDetected(void* unused)
 void kbapp_stateChangeNotification(uint32_t newState)
 {
     int32_t flags;
-    WICED_BT_TRACE("Transport state changed to %d\n", newState);
+    WICED_BT_TRACE("\nTransport state changed to ");
 
-    kbAppState->allowSDS = WICED_FALSE;
-
-    //stop allow Shut Down Sleep (SDS) timer
-    if (wiced_is_timer_in_use(&blekb_allow_sleep_timer))
-    {
-        wiced_stop_timer(&blekb_allow_sleep_timer);
-    }
+    wiced_hidd_set_deep_sleep_allowed(WICED_FALSE);
 
     //stop conn param update timer
     if (wiced_is_timer_in_use(&blekb_conn_param_update_timer))
@@ -1665,18 +1698,20 @@ void kbapp_stateChangeNotification(uint32_t newState)
         wiced_stop_timer(&blekb_conn_param_update_timer);
     }
 
-    kbapp_LED_off(BLEKB_LED_BLUE);
-
     if(newState == BLEHIDLINK_CONNECTED)
     {
+        WICED_BT_TRACE("connected");
+        wiced_hidd_led_blink_stop();
+        kb_LED_on(KB_LED_LE_LINK);
+
         //get host client configuration characteristic descriptor values
-        flags = wiced_ble_hidd_host_info_get_flags(ble_hidd_link.gatts_peer_addr, ble_hidd_link.gatts_peer_addr_type);
+        flags = wiced_hidd_host_get_flags(ble_hidd_link.gatts_peer_addr, ble_hidd_link.gatts_peer_addr_type);
         if(flags != -1)
         {
-            WICED_BT_TRACE("host config flag:%08x\n",flags);
+            WICED_BT_TRACE("\nhost config flag:%08x",flags);
             kbapp_updateGattMapWithNotifications(flags);
         }
-#ifndef  TESTING_USING_HCI
+#ifdef KEYBOARD_PLATFORM
         // enable ghost detection
         wiced_hal_keyscan_enable_ghost_detection(TRUE);
 #endif
@@ -1685,15 +1720,15 @@ void kbapp_stateChangeNotification(uint32_t newState)
 
         if(firstTransportStateChangeNotification)
         {
-            //Wake up from shutdown sleep (SDS) and already have a connection then allow SDS in 1 second
+            //Wake up from shutdown sleep (SDS) and already have a connection then not allowing sleep for 1 second.
             //This will allow time to send a key press.
-            wiced_start_timer(&blekb_allow_sleep_timer,1000); // 1 second. timeout in ms
+            wiced_hidd_deep_sleep_not_allowed(1000); // No deep sleep for 1 second.
         }
         else
         {
             //We connected after power on reset
-            //Start 20 second timer to allow time to setup connection encryption before allowing shutdown sleep (SDS).
-            wiced_start_timer(&blekb_allow_sleep_timer,20000); //20 seconds. timeout in ms
+            //Not allowed to sleep for 20 second to allow time to setup connection encryption.
+            wiced_hidd_deep_sleep_not_allowed(20000); //20 seconds. timeout in ms
 
             //start 15 second timer to make sure connection param update is requested before SDS
             wiced_start_timer(&blekb_conn_param_update_timer,15000); //15 seconds. timeout in ms
@@ -1701,11 +1736,22 @@ void kbapp_stateChangeNotification(uint32_t newState)
     }
     else if(newState == BLEHIDLINK_DISCONNECTED)
     {
-        //allow Shut Down Sleep (SDS) only if we are not attempting reconnect
-        if (!wiced_is_timer_in_use(&ble_hidd_link.reconnect_timer))
-            wiced_start_timer(&blekb_allow_sleep_timer,2000); // 2 seconds. timeout in ms
+        WICED_BT_TRACE("disconnected");
+        if (!blinkingStartup)
+        {
+            wiced_hidd_led_blink_stop();
+        }
+        else
+        {
+            blinkingStartup = 0;
+        }
+        kb_LED_off(KB_LED_LE_LINK);
 
-#ifndef  TESTING_USING_HCI
+        //allow DeepSleep only if we are not attempting reconnect
+        if (!wiced_is_timer_in_use(&ble_hidd_link.reconnect_timer))
+            wiced_hidd_deep_sleep_not_allowed(2000);// for 2 second, no SDS
+
+#ifdef KEYBOARD_PLATFORM
         // disable Ghost detection
         wiced_hal_keyscan_enable_ghost_detection(FALSE);
 #endif
@@ -1714,11 +1760,12 @@ void kbapp_stateChangeNotification(uint32_t newState)
     }
     else if (newState == BLEHIDLINK_DISCOVERABLE)
     {
-        kbapp_LED_on(BLEKB_LED_BLUE);
+        WICED_BT_TRACE("discoverable");
+        wiced_hidd_led_blink(KB_LED_LE_LINK, 0, 500);     // blink LINK line to indicate pairing
     }
     else if ((newState == BLEHIDLINK_ADVERTISING_IN_uBCS_DIRECTED) || (newState == BLEHIDLINK_ADVERTISING_IN_uBCS_UNDIRECTED))
     {
-        kbAppState->allowSDS = WICED_TRUE;
+        wiced_hidd_set_deep_sleep_allowed(WICED_TRUE);
     }
 
     if(firstTransportStateChangeNotification)
@@ -1727,7 +1774,7 @@ void kbapp_stateChangeNotification(uint32_t newState)
 
 void kbapp_batLevelChangeNotification(uint32_t newLevel)
 {
-    WICED_BT_TRACE("bat level changed to %d\n", newLevel);
+    WICED_BT_TRACE("\nbat level changed to %d", newLevel);
 
     if (kbapp_protocol == PROTOCOL_REPORT)
     {
@@ -1964,44 +2011,33 @@ void kbapp_setReport(wiced_hidd_report_type_t reportType,
             if(reportId == kbAppConfig.ledReportID)
             {
                 kbAppState->ledReport.ledStates = blekb_kb_output_rpt = *((uint8_t *)payload);
-                WICED_BT_TRACE("KB LED report : %d\n", kbAppState->ledReport.ledStates);
-
-#ifdef LED_USE_PWM
+                WICED_BT_TRACE("\nKB LED report : %d", kbAppState->ledReport.ledStates);
+#if 0
                 if (kbAppState->ledReport.ledStates & 0x01)
                 {
-                    kbapp_LED_on(BLEKB_PWM_LED1);
+                    kb_LED_on(LED_RED);
                 }
                 else
                 {
-                    kbapp_LED_off(BLEKB_PWM_LED1);
+                    kb_LED_off(LED_RED);
                 }
-
-                if (kbAppState->ledReport.ledStates & 0x02)
-                {
-                    kbapp_LED_on(BLEKB_PWM_LED2);
-                }
-                else
-                {
-                    kbapp_LED_off(BLEKB_PWM_LED2);
-                }
-#else
+#endif
                 //CAPS LED
                 if (kbAppState->ledReport.ledStates & 0x02)
                 {
-                    kbapp_LED_on(BLEKB_LED_CAPS);
+                    kb_LED_on(LED_CAPS);
                 }
                 else
                 {
-                    kbapp_LED_off(BLEKB_LED_CAPS);
+                    kb_LED_off(LED_CAPS);
                 }
-#endif
             }
         }
     }
 
 #ifdef PTS_HIDS_CONFORMANCE_TC_CW_BV_03_C
     blekb_connection_ctrl_rpt = *((uint8_t *)payload);
-    WICED_BT_TRACE("PTS_HIDS_CONFORMANCE_TC_CW_BV_03_C write val: %d \n", blekb_connection_ctrl_rpt);
+    WICED_BT_TRACE("\nPTS_HIDS_CONFORMANCE_TC_CW_BV_03_C write val: %d ", blekb_connection_ctrl_rpt);
 #endif
 }
 
@@ -2010,9 +2046,9 @@ void kbapp_ctrlPointWrite(wiced_hidd_report_type_t reportType,
                           void *payload,
                           uint16_t payloadSize)
 {
-    WICED_BT_TRACE("disconnecting\n");
+//    WICED_BT_TRACE("\ndisconnecting");
 
-    wiced_ble_hidd_link_disconnect();
+    wiced_hidd_disconnect();
 }
 
 
@@ -2024,7 +2060,7 @@ void kbapp_clientConfWriteRptStd(wiced_hidd_report_type_t reportType,
     uint8_t  notification = *(uint16_t *)payload & GATT_CLIENT_CONFIG_NOTIFICATION;
     //uint8_t  indication = *(uint16_t *)payload & GATT_CLIENT_CONFIG_INDICATION;
 
-    WICED_BT_TRACE("clientConfWriteRptStd\n");
+//    WICED_BT_TRACE("\nclientConfWriteRptStd");
 
     kbapp_updateClientConfFlags(notification, KBAPP_CLIENT_CONFIG_NOTIF_STD_RPT);
 }
@@ -2037,7 +2073,7 @@ void kbapp_clientConfWriteRptBitMapped(wiced_hidd_report_type_t reportType,
     uint8_t  notification = *(uint16_t *)payload & GATT_CLIENT_CONFIG_NOTIFICATION;
     //uint8_t  indication = *(uint16_t *)payload & GATT_CLIENT_CONFIG_INDICATION;
 
-    WICED_BT_TRACE("clientConfWriteRptBitMapped\n");
+//    WICED_BT_TRACE("\nclientConfWriteRptBitMapped");
 
     kbapp_updateClientConfFlags(notification, KBAPP_CLIENT_CONFIG_NOTIF_BIT_MAPPED_RPT);
 }
@@ -2050,7 +2086,7 @@ void kbapp_clientConfWriteRptSlp(wiced_hidd_report_type_t reportType,
     uint8_t  notification = *(uint16_t *)payload & GATT_CLIENT_CONFIG_NOTIFICATION;
     //uint8_t  indication = *(uint16_t *)payload & GATT_CLIENT_CONFIG_INDICATION;
 
-    WICED_BT_TRACE("clientConfWriteRptSlp\n");
+//    WICED_BT_TRACE("\nclientConfWriteRptSlp");
     kbapp_updateClientConfFlags(notification, KBAPP_CLIENT_CONFIG_NOTIF_SLP_RPT);
 }
 
@@ -2062,7 +2098,7 @@ void kbapp_clientConfWriteRptFuncLock(wiced_hidd_report_type_t reportType,
     uint8_t  notification = *(uint16_t *)payload & GATT_CLIENT_CONFIG_NOTIFICATION;
     //uint8_t  indication = *(uint16_t *)payload & GATT_CLIENT_CONFIG_INDICATION;
 
-    WICED_BT_TRACE("clientConfWriteRptFuncLock\n");
+//    WICED_BT_TRACE("\nclientConfWriteRptFuncLock");
 
     kbapp_updateClientConfFlags(notification, KBAPP_CLIENT_CONFIG_NOTIF_FUNC_LOCK_RPT);
 }
@@ -2075,7 +2111,7 @@ void kbapp_clientConfWriteScroll(wiced_hidd_report_type_t reportType,
     uint8_t  notification = *(uint16_t *)payload & GATT_CLIENT_CONFIG_NOTIFICATION;
     //uint8_t  indication = *(uint16_t *)payload & GATT_CLIENT_CONFIG_INDICATION;
 
-    WICED_BT_TRACE("clientConfWriteScroll\n");
+//    WICED_BT_TRACE("\nclientConfWriteScroll");
 
     kbapp_updateClientConfFlags(notification, KBAPP_CLIENT_CONFIG_NOTIF_SCROLL_RPT);
 }
@@ -2089,7 +2125,7 @@ void kbapp_clientConfWriteBootMode(wiced_hidd_report_type_t reportType,
     uint8_t  notification = *(uint16_t *)payload & GATT_CLIENT_CONFIG_NOTIFICATION;
     //uint8_t  indication = *(uint16_t *)payload & GATT_CLIENT_CONFIG_INDICATION;
 
-    WICED_BT_TRACE("clientConfWriteBootMode\n");
+//    WICED_BT_TRACE("\nclientConfWriteBootMode");
 
     kbapp_updateClientConfFlags(notification, KBAPP_CLIENT_CONFIG_NOTIF_BOOT_RPT);
 }
@@ -2102,7 +2138,7 @@ void kbapp_clientConfWriteBatteryRpt(wiced_hidd_report_type_t reportType,
     uint8_t  notification = *(uint16_t *)payload & GATT_CLIENT_CONFIG_NOTIFICATION;
     //uint8_t  indication = *(uint16_t *)payload & GATT_CLIENT_CONFIG_INDICATION;
 
-    WICED_BT_TRACE("clientConfWriteBatteryRpt\n");
+//    WICED_BT_TRACE("\nclientConfWriteBatteryRpt");
 
     kbapp_updateClientConfFlags(notification, KBAPP_CLIENT_CONFIG_NOTIF_BATTERY_RPT);
 }
@@ -2115,7 +2151,7 @@ void kbapp_setProtocol(wiced_hidd_report_type_t reportType,
 {
     kbapp_protocol = *((uint8_t *)payload);
 
-    WICED_BT_TRACE("New Protocol = %d\n", kbapp_protocol);
+//    WICED_BT_TRACE("\nNew Protocol = %d", kbapp_protocol);
 
     if(kbapp_protocol == PROTOCOL_REPORT)
     {
@@ -2131,7 +2167,7 @@ void kbapp_setProtocol(wiced_hidd_report_type_t reportType,
 
 void kbapp_updateClientConfFlags(uint16_t enable, uint16_t featureBit)
 {
-    kbapp_updateGattMapWithNotifications(wiced_ble_hidd_host_info_update_flags(ble_hidd_link.gatts_peer_addr, ble_hidd_link.gatts_peer_addr_type, enable,featureBit));
+    kbapp_updateGattMapWithNotifications(wiced_hidd_host_set_flags(ble_hidd_link.gatts_peer_addr, enable, featureBit));
 }
 
 void kbapp_updateGattMapWithNotifications(uint16_t flags)
@@ -2190,47 +2226,35 @@ uint32_t kbapp_sleep_handler(wiced_sleep_poll_type_t type )
 {
     uint32_t ret = WICED_SLEEP_NOT_ALLOWED;
 
-#ifndef  TESTING_USING_HCI
-    // Check if keys are pressed before deciding whether sleep is allowed
-    kbAppState->keyInterrupt_On = wiced_hal_keyscan_is_any_key_pressed();
-#endif
-
+#if SLEEP_ALLOWED
     switch(type)
     {
         case WICED_SLEEP_POLL_TIME_TO_SLEEP:
-            ret = WICED_SLEEP_MAX_TIME_TO_SLEEP;
-
             //if we are in the middle of kescan recovery, no sleep
-            if (kbAppState->recoveryInProgress)
+            if (!kbAppState->recoveryInProgress
+#if defined(CYW20819A1)
+                && !keyscanActive()
+#endif
+               )
             {
-                ret = 0;
+                ret = WICED_SLEEP_MAX_TIME_TO_SLEEP;
             }
-
             break;
 
         case WICED_SLEEP_POLL_SLEEP_PERMISSION:
+ #if SLEEP_ALLOWED > 1
             ret = WICED_SLEEP_ALLOWED_WITH_SHUTDOWN;
-
-            if (!kbAppState->allowSDS)
-            {
-                ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
-            }
-
-            //if key is not released, no Shut Down Sleep (SDS)
-            if (kbAppState->keyInterrupt_On)
-            {
-                ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
-            }
-
-#ifdef OTA_FIRMWARE_UPGRADE
-            if ( wiced_ota_fw_upgrade_is_active() )
-                ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
-#endif
-
+            // a key is down, no deep sleep
+            if (wiced_hal_keyscan_is_any_key_pressed()
+  #if defined(CYW20819A1)
+             || keyscanActive()
+  #endif
+               )
+ #endif
+            ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
             break;
-
     }
-
+#endif
     return ret;
 }
 
@@ -2247,87 +2271,23 @@ void kbapp_aon_restore(void)
     }
 }
 
-void kbapp_LED_init(void)
-{
-#ifdef LED_USE_PWM
-    uint16_t init_value = 0x3FF - BLEKB_PWM_STEPS;
-    uint16_t toggle_val = 0x3FF - 0;
-
-    wiced_hal_gpio_configure_pin(BLEKB_PWM_LED1, GPIO_OUTPUT_ENABLE, 0);
-    wiced_hal_gpio_configure_pin(BLEKB_PWM_LED2, GPIO_OUTPUT_ENABLE, 0);
-
-    // base clock 24MHz,
-    wiced_hal_aclk_enable(256000, ACLK1, ACLK_FREQ_24_MHZ);
-    wiced_hal_pwm_start(BLEKB_PWM_LED1 - BLEKB_PWM_LED_BASE , PMU_CLK, toggle_val, init_value, 0);
-    wiced_hal_pwm_start(BLEKB_PWM_LED2 - BLEKB_PWM_LED_BASE , PMU_CLK, toggle_val, init_value, 0);
-#else
-    if (wiced_hal_mia_is_reset_reason_por())
-    {
-        wiced_hal_gpio_configure_pin(BLEKB_LED_CAPS, GPIO_OUTPUT_ENABLE, 1);
-        wiced_hal_gpio_configure_pin(BLEKB_LED_BLUE, GPIO_OUTPUT_ENABLE, 1);
-        wiced_hal_gpio_configure_pin(BLEKB_LED_GREEN, GPIO_OUTPUT_ENABLE, 0);
-        wiced_hal_gpio_configure_pin(BLEKB_LED_RED, GPIO_OUTPUT_ENABLE, 1);
-    }
-
-    //maintain LED state during SDS
-    wiced_hal_gpio_slimboot_reenforce_cfg(BLEKB_LED_CAPS, GPIO_OUTPUT_ENABLE);
-    wiced_hal_gpio_slimboot_reenforce_cfg(BLEKB_LED_BLUE, GPIO_OUTPUT_ENABLE);
-    wiced_hal_gpio_slimboot_reenforce_cfg(BLEKB_LED_GREEN, GPIO_OUTPUT_ENABLE);
-    wiced_hal_gpio_slimboot_reenforce_cfg(BLEKB_LED_RED, GPIO_OUTPUT_ENABLE);
-#endif
-}
-
-
-void kbapp_LED_on(uint8_t gpio)
-{
-#ifdef LED_USE_PWM
-    /*
-     * turn on LED by setting toggle value value to (0x3FF - BLEKB_PWM_STEPS/2)
-     * BLEKB_PWM_STEPS(1000) to makes 48 kHz
-    */
-    uint16_t init_value = 0x3FF - BLEKB_PWM_STEPS;
-    uint16_t toggle_val = 0x3FF - BLEKB_PWM_STEPS/10; // On(0): 10%, off(1):90%
-
-    wiced_hal_pwm_change_values(gpio - BLEKB_PWM_LED_BASE, toggle_val,init_value);
-#else
-    wiced_hal_gpio_set_pin_output(gpio, 0);
-#endif
-}
-
-
-void kbapp_LED_off(uint8_t gpio)
-{
-#ifdef LED_USE_PWM
-    /*
-     * turn off LED by setting toggle value to max(0x3FF)
-     * GPIO will be set 0.
-    */
-    uint16_t init_value = 0x3FF - BLEKB_PWM_STEPS;
-    uint16_t toggle_val = 0x3FF - 0;
-
-    wiced_hal_pwm_change_values(gpio - BLEKB_PWM_LED_BASE, toggle_val,init_value);
-#else
-    wiced_hal_gpio_set_pin_output(gpio, 1);
-#endif
-}
-
 #ifdef OTA_FIRMWARE_UPGRADE
 ////////////////////////////////////////////////////////////////////////////////
 /// Process OTA firmware upgrade status change event
 ////////////////////////////////////////////////////////////////////////////////
 void blekbapp_ota_fw_upgrade_status(uint8_t status)
 {
-    WICED_BT_TRACE("OTAFU status:%d\n", status);
+    WICED_BT_TRACE("\nOTAFU status:%d", status);
 
     switch (status)
     {
     case OTA_FW_UPGRADE_STATUS_STARTED:             // Client started OTA firmware upgrade process
-        WICED_BT_TRACE("allow slave latency 0\n");
+        WICED_BT_TRACE("\nallow slave latency 0");
         wiced_blehidd_allow_slave_latency(FALSE);
         break;
 
     case OTA_FW_UPGRADE_STATUS_ABORTED:             // Aborted or failed verification */
-        WICED_BT_TRACE("allow slave latency 1\n");
+        WICED_BT_TRACE("\nallow slave latency 1");
         wiced_blehidd_allow_slave_latency(TRUE);
         break;
 

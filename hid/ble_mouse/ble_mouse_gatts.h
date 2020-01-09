@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -33,7 +33,6 @@
 
 #ifndef _BLEMOUSE_GATTS_H
 #define _BLEMOUSE_GATTS_H
-#include "blehidgatts.h"
 
 /******************************************************************************
  *                         Type Definitions
