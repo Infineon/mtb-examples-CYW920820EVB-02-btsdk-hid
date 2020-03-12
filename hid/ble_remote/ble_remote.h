@@ -44,14 +44,11 @@
 #define __BLEREMOTE_H__
 #ifdef SUPPORT_IR
 #include "ir/bleapp_appirtx.h"
-#endif
+#endif // SUPPORT_IR
 #ifdef ENABLE_ADC_AUDIO_ENHANCEMENTS
 #include "adc.h"
-#endif
+#endif // ENABLE_ADC_AUDIO_ENHANCEMENTS
 #include "interrupt.h"
-#ifdef SUPPORT_MOTION
-#include "motion/motion_icm.h"
-#endif
 #include "wiced_hidd_micaudio.h"
 #include "wiced_hidd_lib.h"
 #include "hidd_lib.h"
@@ -70,12 +67,24 @@ extern wiced_platform_gpio_t platform_gpio_pins[];
 extern uint8_t bleremote_key_std_rpt[];
 extern uint8_t bleremote_bitmap_rpt[];
 
+/////////////////////////////////////////////////////////////////////////////////
+#ifdef ATT_MTU_SIZE_180
+ #define AUDIO_MTU_SIZE 180
+#else
+ #define AUDIO_MTU_SIZE 20
+#endif
+
 /*******************************************************************************
 * Types and Defines
 *******************************************************************************/
 
-#define NUM_KEYSCAN_ROWS    5  // Num of Rows in keyscan matrix
-#define NUM_KEYSCAN_COLS    4  // Num of Cols in keyscan matrix
+#if is_20735Family
+ #define NUM_KEYSCAN_ROWS    5  // Num of Rows in keyscan matrix
+ #define NUM_KEYSCAN_COLS    4  // Num of Cols in keyscan matrix
+#else
+ #define NUM_KEYSCAN_ROWS    7  // Num of Rows in keyscan matrix
+ #define NUM_KEYSCAN_COLS    7  // Num of Cols in keyscan matrix
+#endif
 
 #define STD_KB_REPORT_ID            1
 #define BITMAPPED_REPORT_ID         2
@@ -83,8 +92,8 @@ extern uint8_t bleremote_bitmap_rpt[];
 #define RPT_ID_MOUSE                8
 #define MEDIA_REPORT_ID           0xa
 #define RPT_ID_IN_ABS_XY         0x20
+#define RPT_ID_VOICE_DATA        0xF7
 #define RPT_ID_VOICE_CTL         0xF8
-#define MOTION_REPORT_ID         RPT_ID_MOUSE
 #define GPIO_TOUCHPAD_OFF           0
 #define GPIO_TOUCHPAD_ON            1
 
@@ -121,16 +130,21 @@ extern uint8_t bleremote_bitmap_rpt[];
 //defined the maximum number of different client configuration notifications
 #define MAX_NUM_CLIENT_CONFIG_NOTIF     16
 //bit mask for different client configuration notifications
-#define KBAPP_CLIENT_CONFIG_NOTIF_STD_RPT           (0x02)
-#define KBAPP_CLIENT_CONFIG_NOTIF_BIT_MAPPED_RPT    (0x04)
-#define KBAPP_CLIENT_CONFIG_NOTIF_MOTION_RPT        (0x08)
-#define KBAPP_CLIENT_CONFIG_NOTIF_USER_DEFINED_KEY_RPT      (0x10)
-#define KBAPP_CLIENT_CONFIG_NOTIF_BATTERY_RPT       (0x20)
-#define KBAPP_CLIENT_CONFIG_NOTIF_VOICE_RPT         (0x40)
-#define KBAPP_CLIENT_CONFIG_NOTIF_VOICE_CTRL_RPT    (0x80)
+#define KBAPP_CLIENT_CONFIG_NOTIF_STD_RPT               (0x02)
+#define KBAPP_CLIENT_CONFIG_NOTIF_BIT_MAPPED_RPT        (0x04)
+#define KBAPP_CLIENT_CONFIG_NOTIF_USER_DEFINED_KEY_RPT  (0x10)
+#define KBAPP_CLIENT_CONFIG_NOTIF_BATTERY_RPT           (0x20)
+#define KBAPP_CLIENT_CONFIG_NOTIF_VOICE_RPT             (0x40)
+#define KBAPP_CLIENT_CONFIG_NOTIF_VOICE_CTRL_RPT        (0x80)
+#ifdef ANDROID_AUDIO
+ #define KBAPP_CLIENT_CONFIG_NOTIF_ATV_VOICE_RX_BIT_OFFSET    6
+ #define KBAPP_CLIENT_CONFIG_NOTIF_ATV_VOICE_CTL_BIT_OFFSET   7
+ #define KBAPP_CLIENT_CONFIG_NOTIF_ATV_VOICE_RX     KBAPP_CLIENT_CONFIG_NOTIF_VOICE_RPT
+ #define KBAPP_CLIENT_CONFIG_NOTIF_ATV_VOICE_CTL    KBAPP_CLIENT_CONFIG_NOTIF_VOICE_CTRL_RPT
+#endif // ANDROID_AUDIO
 #ifdef SUPPORT_TOUCHPAD
-#define KBAPP_CLIENT_CONFIG_NOTIF_TOUCHPAD_RPT      (0x0100)
-#endif
+ #define KBAPP_CLIENT_CONFIG_NOTIF_TOUCHPAD_RPT       (0x0100)
+#endif // SUPPORT_TOUCHPAD
 
 #define KBAPP_CLIENT_CONFIG_NOTIF_NONE              (0)
 
@@ -305,6 +319,304 @@ typedef PACKED struct
 }RemoteAppConfig;
 #pragma pack()
 
+/// KB USB usages
+enum UsbUsage
+{
+    USB_USAGE_NO_EVENT=0,
+    USB_USAGE_ROLLOVER=1,
+    USB_USAGE_POST_FAIL=2,
+    USB_USAGE_UNDEFINED_ERROR=3,
+
+    USB_USAGE_A=4,
+    USB_USAGE_B=5,
+    USB_USAGE_C=6,
+    USB_USAGE_D=7,
+    USB_USAGE_E=8,
+    USB_USAGE_F=9,
+    USB_USAGE_G=10,
+    USB_USAGE_H=11,
+    USB_USAGE_I=12,
+    USB_USAGE_J=13,
+    USB_USAGE_K=14,
+    USB_USAGE_L=15,
+    USB_USAGE_M=16,
+    USB_USAGE_N=17,
+    USB_USAGE_O=18,
+    USB_USAGE_P=19,
+    USB_USAGE_Q=20,
+    USB_USAGE_R=21,
+    USB_USAGE_S=22,
+    USB_USAGE_T=23,
+    USB_USAGE_U=24,
+    USB_USAGE_V=25,
+    USB_USAGE_W=26,
+    USB_USAGE_X=27,
+    USB_USAGE_Y=28,
+    USB_USAGE_Z=29,
+
+    USB_USAGE_1=30,
+    USB_USAGE_2=31,
+    USB_USAGE_3=32,
+    USB_USAGE_4=33,
+    USB_USAGE_5=34,
+    USB_USAGE_6=35,
+    USB_USAGE_7=36,
+    USB_USAGE_8=37,
+    USB_USAGE_9=38,
+    USB_USAGE_0=39,
+
+    USB_USAGE_ENTER=40,
+    USB_USAGE_ESCAPE=41,
+    USB_USAGE_BACKSPACE=42,
+    USB_USAGE_TAB=43,
+    USB_USAGE_SPACEBAR=44,
+    USB_USAGE_MINUS=45,
+    USB_USAGE_EQUAL=46,
+    USB_USAGE_LEFT_BRACKET=47,
+    USB_USAGE_RIGHT_BRACKET=48,
+    USB_USAGE_BACK_SLASH=49,
+
+    USB_USAGE_NON_US_HASH=50,
+    USB_USAGE_SEMICOLON=51,
+    USB_USAGE_QUOTE=52,
+    USB_USAGE_ACCENT=53,
+    USB_USAGE_COMMA=54,
+    USB_USAGE_STOP_AND_GREATER=55,
+    USB_USAGE_SLASH=56,
+    USB_USAGE_CAPS_LOCK=57,
+    USB_USAGE_F1=58,
+    USB_USAGE_F2=59,
+
+    USB_USAGE_F3=60,
+    USB_USAGE_F4=61,
+    USB_USAGE_F5=62,
+    USB_USAGE_F6=63,
+    USB_USAGE_F7=64,
+    USB_USAGE_F8=65,
+    USB_USAGE_F9=66,
+    USB_USAGE_F10=67,
+    USB_USAGE_F11=68,
+    USB_USAGE_F12=69,
+
+    USB_USAGE_PRINT_SCREEN=70,
+    USB_USAGE_SCROLL_LOCK=71,
+    USB_USAGE_PAUSE=72,
+    USB_USAGE_INSERT=73,
+    USB_USAGE_HOME=74,
+    USB_USAGE_PAGE_UP=75,
+    USB_USAGE_DELETE=76,
+    USB_USAGE_END=77,
+    USB_USAGE_PAGE_DOWN=78,
+    USB_USAGE_RIGHT_ARROW=79,
+
+    USB_USAGE_LEFT_ARROW=80,
+    USB_USAGE_DOWN_ARROW=81,
+    USB_USAGE_UP_ARROW=82,
+    USB_USAGE_NUM_LOCK=83,
+    USB_USAGE_KP_SLASH=84,
+    USB_USAGE_KP_ASTERISK=85,
+    USB_USAGE_KP_MINUS=86,
+    USB_USAGE_KP_PLUS=87,
+    USB_USAGE_KP_ENTER=88,
+    USB_USAGE_KP_1=89,
+
+    USB_USAGE_KP_2=90,
+    USB_USAGE_KP_3=91,
+    USB_USAGE_KP_4=92,
+    USB_USAGE_KP_5=93,
+    USB_USAGE_KP_6=94,
+    USB_USAGE_KP_7=95,
+    USB_USAGE_KP_8=96,
+    USB_USAGE_KP_9=97,
+    USB_USAGE_KP_0=98,
+    USB_USAGE_KP_DOT=99,
+
+    USB_USAGE_NON_US_BACK_SLASH=100,
+    USB_USAGE_APPLICATION=101,
+    USB_USAGE_POWER=102,
+    USB_USAGE_KP_EQUAL=103,
+    USB_USAGE_F13=104,
+    USB_USAGE_F14=105,
+    USB_USAGE_F15=106,
+    USB_USAGE_F16=107,
+    USB_USAGE_F17=108,
+    USB_USAGE_F18=109,
+
+    USB_USAGE_F19=110,
+    USB_USAGE_F20=111,
+    USB_USAGE_F21=112,
+    USB_USAGE_F22=113,
+    USB_USAGE_F23=114,
+    USB_USAGE_F24=115,
+    USB_USAGE_EXECUTE=116,
+    USB_USAGE_HELP=117,
+    USB_USAGE_MENU=118,
+    USB_USAGE_SELECT=119,
+
+    USB_USAGE_STOP=120,
+    USB_USAGE_AGAIN=121,
+    USB_USAGE_UNDO=122,
+    USB_USAGE_CUT=123,
+    USB_USAGE_COPY=124,
+    USB_USAGE_PASTE=125,
+    USB_USAGE_FIND=126,
+    USB_USAGE_MUTE=127,
+    USB_USAGE_VOL_UP=128,
+    USB_USAGE_VOL_DOWN=129,
+
+    USB_USAGE_LOCKING_CAPS_LOCK=130,
+    USB_USAGE_LOCKING_NUM_LOCK=131,
+    USB_USAGE_LOCKING_SCROLL_LOCK=132,
+    USB_USAGE_KP_COMMA=133,
+    USB_USAGE_KP_EQUAL_AS400=134,
+    USB_USAGE_INTL_1=135,
+    USB_USAGE_INTL_2=136,
+    USB_USAGE_INTL_3=137,
+    USB_USAGE_INTL_4=138,
+    USB_USAGE_INTL_5=139,
+
+    USB_USAGE_INTL_6=140,
+    USB_USAGE_INTL_7=141,
+    USB_USAGE_INTL_8=142,
+    USB_USAGE_INTL_9=143,
+    USB_USAGE_LANG_1=144,
+    USB_USAGE_LANG_2=145,
+    USB_USAGE_LANG_3=146,
+    USB_USAGE_LANG_4=147,
+    USB_USAGE_LANG_5=148,
+    USB_USAGE_LANG_6=149,
+
+    USB_USAGE_LANG_7=150,
+    USB_USAGE_LANG_8=151,
+    USB_USAGE_LANG_9=152,
+    USB_USAGE_ALT_ERASE=153,
+    USB_USAGE_SYS_REQ=154,
+    USB_USAGE_CANCEL=155,
+    USB_USAGE_CLEAR=156,
+    USB_USAGE_PRIOR=157,
+    USB_USAGE_RETURN=158,
+    USB_USAGE_SEPARATOR=159,
+
+    USB_USAGE_OUT=160,
+    USB_USAGE_OPER=161,
+    USB_USAGE_CLEAR_AGAIN=162,
+    USB_USAGE_CRSEL=163,
+    USB_USAGE_EXSEL=164,
+
+    // Reserved 165-175
+
+    USB_USAGE_KP_00=176,
+    USB_USAGE_KP_000=177,
+    USB_USAGE_THOUSANDS_SEPERATOR=178,
+    USB_USAGE_DECIMAL_SEPERATOR=179,
+
+    USB_USAGE_CURRENCY_UNIT=180,
+    USB_USAGE_CURRENCY_SUB_UNIT=181,
+    USB_USAGE_KP_LEFT_PAREN=182,
+    USB_USAGE_KP_RIGHT_PAREN=183,
+    USB_USAGE_KP_LEFT_CURLY_BRACE=184,
+    USB_USAGE_KP_RIGHT_CURLY_BRACE=185,
+    USB_USAGE_KP_TAB=186,
+    USB_USAGE_KP_BACKSPACE=187,
+    USB_USAGE_KP_A=188,
+    USB_USAGE_KP_B=189,
+
+    USB_USAGE_KP_C=190,
+    USB_USAGE_KP_D=191,
+    USB_USAGE_KP_E=192,
+    USB_USAGE_KP_F=193,
+    USB_USAGE_KP_XOR=194,
+    USB_USAGE_KP_CARET=195,
+    USB_USAGE_KP_PERCENT=196,
+    USB_USAGE_KP_LESS_THAN=197,
+    USB_USAGE_KP_GREATER_THAN=198,
+    USB_USAGE_KP_AMPERSAND=199,
+
+    USB_USAGE_KP_DOUBLE_AMPERSAND=200,
+    USB_USAGE_KP_VERTICAL_BAR=201,
+    USB_USAGE_KP_DOUBLE_VERTICAL_BAR=202,
+    USB_USAGE_KP_COLON=203,
+    USB_USAGE_KP_HASH=204,
+    USB_USAGE_KP_SPACE=205,
+    USB_USAGE_KP_AT=206,
+    USB_USAGE_KP_EXCLAMATION=207,
+    USB_USAGE_KP_MEM_STORE=208,
+    USB_USAGE_KP_MEM_RECALL=209,
+
+    USB_USAGE_KP_MEM_CLEAR=210,
+    USB_USAGE_KP_MEM_ADD=211,
+    USB_USAGE_KP_MEM_SUBTRACT=212,
+    USB_USAGE_KP_MEM_MULTIPLY=213,
+    USB_USAGE_KP_MEM_DIVIDE=214,
+    USB_USAGE_KP_PLUS_MINUS=215,
+    USB_USAGE_KP_CLEAR=216,
+    USB_USAGE_KP_CLEAR_ENTRY=217,
+    USB_USAGE_KP_BINARY=218,
+    USB_USAGE_KP_OCTAL=219,
+
+    USB_USAGE_KP_DECIMAL=220,
+    USB_USAGE_KP_HEX=221,
+    // 222-223 reserved
+    USB_USAGE_LEFT_CTL=224,
+    USB_USAGE_LEFT_SHIFT=225,
+    USB_USAGE_LEFT_ALT=226,
+    USB_USAGE_LEFT_GUI=227,
+    USB_USAGE_RIGHT_CTL=228,
+    USB_USAGE_RIGHT_SHIFT=229,
+
+    USB_USAGE_RIGHT_ALT=230,
+    USB_USAGE_RIGHT_GUI=231
+};
+
+/// Modifier keys bit masks
+enum
+{
+    USB_MODKEY_MASK_LEFT_CTL=0x01,
+    USB_MODKEY_MASK_LEFT_SHIFT=0x02,
+    USB_MODKEY_MASK_LEFT_ALT=0x04,
+    USB_MODKEY_MASK_LEFT_GUI=0x08,
+    USB_MODKEY_MASK_RIGHT_CTL=0x10,
+    USB_MODKEY_MASK_RIGHT_SHIFT=0x20,
+    USB_MODKEY_MASK_RIGHT_ALT=0x40,
+    USB_MODKEY_MASK_RIGHT_GUI=0x80
+};
+
+#if !is_20735Family
+enum bitmapped_key
+{
+    BITMAP_AC_BACK,   // bit 0
+    BITMAP_AC_HOME,   // bit 1
+    BITMAP_AC_SEARCH, // bit 2
+    BITMAP_MENU_LEFT, // bit 3
+    BITMAP_MENU_UP,   // bit 4
+    BITMAP_MENU_DOWN, // bit 5
+    BITMAP_VOL_DOWN,  // bit 6
+    BITMAP_VOL_UP,    // bit 7
+
+    BITMAP_MENU_RIGHT,// bit 8
+    BITMAP_MENU_PICK, // bit 9
+    BITMAP_PLAY_PAUSE,// bit 10
+    BITMAP_MUTE,      // bit 11
+    BITMAP_FAST_FORWD,// bit 12
+    BITMAP_REWIND,    // bit 13
+    BITMAP_CH_UP,     // bit 14
+    BITMAP_CH_DOWN,   // bit 15
+
+    BITMAP_CH,        // bit 16
+    BITMAP_ODR_MOVIE, // bit 17
+    BITMAP_PREVIOUS,  // bit 18 (Recall Last)
+    BITMAP_POWER,     // bit 19
+    BITMAP_SHOPPING,  // bit 20
+    BITMAP_VIEW_TGL,  // bit 21
+    BITMAP_NUMBER,    // bit 22
+    BITMAP_NEXT_TRACK,// bit 23
+
+    BITMAP_PREV_TRACK,// bit 24
+    BITMAP_REVIEW,    // bit 25
+    BITMAP_MENU,      // bit 26
+
+};
+#endif
 
 /*** ALL EXTERNAL REPORTS MUST BE PACKED!
  *** (and don't forget the pack() afterwards) **/
@@ -368,16 +680,6 @@ typedef struct
 }RemoteReport;
 #pragma pack()
 
-#ifdef SUPPORT_MOTION
- #define FINDME_LED WICED_PLATFORM_LED_1     // use first LED for findme LED
- #define GPIO_MOTION_INT_GPIO    WICED_PLATFORM_GPIO_6                           // interrupt pin used for motion
- #define GPIO_MOTION_INT         (platform_gpio_pins[GPIO_MOTION_INT_GPIO].gpio_pin)
- #define GPIO_SDA_GPIO           WICED_PLATFORM_GPIO_7                           // SDA pin used for motion
- #define GPIO_SDA                (platform_gpio_pins[GPIO_SDA_GPIO].gpio_pin)
- #define GPIO_SDS_GPIO           WICED_PLATFORM_GPIO_8                           // SDS pin used for motion
- #define GPIO_SDS                (platform_gpio_pins[GPIO_SDS_GPIO].gpio_pin)
-#endif
-
 #define GPIO_TOUCHPAD_INT_GPIO     WICED_PLATFORM_GPIO_5                           // interrupt pin used for touchpad interrupt
 #define GPIO_TOUCHPAD_INT          (platform_gpio_pins[GPIO_TOUCHPAD_INT_GPIO].gpio_pin)
 #define GPIO_RSTN_TP_GPIO          WICED_PLATFORM_GPIO_4                           // touchpad reset_N pin
@@ -394,14 +696,22 @@ typedef struct
  #define VKEY_INDEX_UP              (VKEY_INDEX_RIGHT+3)
 #endif /* SUPPORT_TOUCHPAD */
 
+#define LED_ON  0
+#define LED_OFF 1
+#if 0
+ #define LED_RED  (*platform_led[0].gpio)
+ #define LED_BLUE (*platform_led[1].gpio)
+#else
+  #define LED_RED  26
+  #define LED_BLUE 27
+#endif
+#define LED_LE_LINK LED_BLUE
+
 #ifdef SUPPORTING_FINDME
 #include "pwm.h"
 #define FINDME_ALERT_TYPE        ALERT_BUZ_LED  // ALERT_LED, ALERT_BUZ
 
-#define LED_ON  0
-#define LED_OFF 1
-#define FINDME_LED WICED_PLATFORM_LED_1     // use first LED for findme LED
-#define GPIO_PORT_LED (*platform_led[FINDME_LED].gpio)
+#define FINDME_LED LED_RED
 
 // findMe BUZ alert config
 typedef struct
@@ -490,7 +800,7 @@ typedef struct
     AppLedAlertConfig alertLedCfg[APP_ALERT_PATTERN_MAX_ID];
 }tAppAlertConfig;
 
-#endif
+#endif // SUPPORTING_FINDME
 
 /// Key types. Used to direct key codes to the relevant key processing function
 enum KeyType
@@ -621,7 +931,7 @@ typedef struct
     HidEventUserDefine  voiceCtrlEvent;
 #ifdef SUPPORT_TOUCHPAD
     HidEventTouchpad    touchpadEvent;
-#endif
+#endif // SUPPORT_TOUCHPAD
 /// The event queue for use by app.
     wiced_hidd_app_event_queue_t appEventQueue;
 
@@ -630,7 +940,7 @@ typedef struct
     uint8_t micStopEventInQueue;    //indicate if WICED_HIDD_MIC_STOP event is in the event queue
     uint8_t audioPacketInQueue;
     uint8_t audiobutton_pressed;
-#endif
+#endif // SUPPORT_AUDIO
 
     uint8_t codecSettingMsg_type;
     uint8_t codecSettingMsg_dataCnt;
@@ -687,7 +997,6 @@ void bleremoteapp_procEvtUserDefinedKey(uint8_t upDownFlag, uint8_t keyCode, uin
 
 void bleremoteapp_appActivityDetected(void *remApp);
 void bleremoteapp_userKeyPressDetected(void* unused);
-void bleremoteapp_motionsensorActivityDetected(void* unused, uint8_t unsued);
 
 
 void bleremoteapp_batLevelChangeNotification(uint32_t newLevel);
@@ -710,8 +1019,6 @@ void bleremoteapp_voiceReadCodecSetting(void);
 void bleremoteapp_voiceWriteCodecSetting(void);
 
 
-//motion
-void bleremoteapp_motionInterruptHandler(void);
 uint8_t bleremoteapp_pollActivitySensor(void);
 void bleremoteapp_procEvtMotion(void);
 #ifdef SUPPORT_TOUCHPAD
@@ -719,8 +1026,7 @@ void bleremoteapp_procEvtTouchpad(void);
 void   gpioActivityDetected(void * appData, uint8_t portPin);
 uint8_t   pollTouchpadActivity(void);
 uint8_t  handleTouchpadVirtualKey(HidEventKey * ke);
-#endif
-
+#endif // SUPPORT_TOUCHPAD
 
 
 void bleremoteapp_txModifiedKeyReports(void);
@@ -735,13 +1041,12 @@ void bleremoteapp_ctrlPointWrite(wiced_hidd_report_type_t reportType, uint8_t re
 void bleremoteapp_clientConfWriteRptStd(wiced_hidd_report_type_t reportType, uint8_t reportId, void *payload, uint16_t payloadSize);
 void bleremoteapp_clientConfWriteRptBitMapped(wiced_hidd_report_type_t reportType, uint8_t reportId, void *payload, uint16_t payloadSize);
 void bleremoteapp_clientConfWriteBatteryRpt(wiced_hidd_report_type_t reportType, uint8_t reportId, void *payload, uint16_t payloadSize);
-void bleremoteapp_clientConfWriteRptMotion(wiced_hidd_report_type_t reportType, uint8_t reportId, void *payload, uint16_t payloadSize);
 void bleremoteapp_clientConfWriteRptUserDefinedKey(wiced_hidd_report_type_t reportType, uint8_t reportId, void *payload, uint16_t payloadSize);
 void bleremoteapp_clientConfWriteRptVoice(wiced_hidd_report_type_t reportType, uint8_t reportId, void *payload, uint16_t payloadSize);
 void bleremoteapp_clientConfWriteRptVoiceCtrl(wiced_hidd_report_type_t reportType, uint8_t reportId, void *payload, uint16_t payloadSize);
 #ifdef SUPPORT_TOUCHPAD
 void bleremoteapp_clientConfWriteRptTouchpad(wiced_hidd_report_type_t reportType, uint8_t reportId, void *payload, uint16_t payloadSize);
-#endif
+#endif // SUPPORT_TOUCHPAD
 void bleremoteapp_updateClientConfFlags(uint16_t enable, uint16_t featureBit);
 void bleremoteapp_updateGattMapWithNotifications(uint16_t flags);
 
@@ -767,10 +1072,6 @@ void bleremoteapp_alertLedOff(void);
 void bleremoteapp_alertLedPlay(uint8_t pattern_id);
 void bleremoteapp_alertLedStop(void);
 int bleremoteapp_findme_writeCb(void *p);
-#endif
+#endif // SUPPORTING_FINDME
 
-
-
-
-
-#endif
+#endif // __BLEREMOTE_H__

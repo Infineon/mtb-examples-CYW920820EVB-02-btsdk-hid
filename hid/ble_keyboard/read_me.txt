@@ -91,6 +91,8 @@ DISCONNECTED_ENDLESS_ADV
     Use this option to enable disconnected endless advertisement. When this option
     is used, the device will do advertising forever until it is connected. To
     conserve power, it allows SDS/ePDS and do the advertising in a long interval.
+    If AUTO_RECONNECT option is not set, then pressing a key will try to reconnect
+    and stays in adv forever until it is connected.
 
 SKIP_PARAM_UPDATE
     Use this option to skip to send link parameter update request.

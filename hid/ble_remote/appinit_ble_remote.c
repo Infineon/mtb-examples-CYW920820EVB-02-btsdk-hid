@@ -39,6 +39,7 @@
 #include "wiced_bt_trace.h"
 #include "wiced_hidd_lib.h"
 #include "ble_remote.h"
+#include "android_voice.h"
 #include "hidd_lib.h"
 
 extern void sfi_allow_deep_sleep(void);
@@ -52,13 +53,60 @@ static hci_rpt_db_t hci_rpt_db[] =
 };
 #define HCI_CONTROL_RPT_CNT (sizeof(hci_rpt_db)/sizeof(hci_rpt_db_t))
 #endif
+
+#ifdef ANDROID_AUDIO
+wiced_bt_gatt_status_t blehid_app_gatts_req_read_callback( uint16_t conn_id, wiced_bt_gatt_read_t * p_data )
+{
+    // Check if the write request is for the Android TV Voice service
+    if ((p_data->handle >= HANDLE_ATV_VOICE_SERVICE) && (p_data->handle <= HANDLE_ATV_VOICE_SERVICE_END))
+    {
+        WICED_BT_TRACE("\nAndroid gatts read, handle:%04x offset:%d len=%d, ", p_data->handle, p_data->offset, p_data->p_val_len);
+        return android_voice_read_handler(conn_id, p_data);
+    }
+    return WICED_BT_GATT_NOT_FOUND;
+}
+
+wiced_bt_gatt_status_t blehid_app_gatts_req_write_callback( uint16_t conn_id, wiced_bt_gatt_write_t * p_data )
+{
+    // Check if the write request is for the Android TV Voice service
+    if ((p_data->handle >= HANDLE_ATV_VOICE_SERVICE) && (p_data->handle <= HANDLE_ATV_VOICE_SERVICE_END))
+    {
+#if 0
+        WICED_BT_TRACE("\nAndroid gatts write, handle:%04x offset:%d len=%d", p_data->handle, p_data->offset, p_data->val_len);
+        if (p_data->val_len)
+        {
+            STRACE_ARRAY(", ",p_data->p_val + p_data->offset, p_data->val_len);
+        }
+#endif
+        return android_voice_write_handler(conn_id, p_data);
+    }
+    return WICED_BT_GATT_NOT_FOUND;
+}
+#else
+ #define blehid_app_gatts_req_read_callback     NULL
+ #define blehid_app_gatts_req_write_callback    NULL
+#endif
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+void app_LED_init(void)
+{
+    wiced_hidd_led_init(LED_RED, LED_OFF);
+    wiced_hidd_led_init(LED_BLUE, LED_OFF);
+}
+
 /******************************************************************************
  *                          Function Definitions
 ******************************************************************************/
-wiced_result_t blehid_app_init(void)
+wiced_result_t app_init(void)
 {
     /*  GATT DB Initialization  */
-    if ( wiced_hidd_gatts_init( blehid_db_data, blehid_db_size, blehid_gattAttributes, blehid_gattAttributes_size, NULL, NULL ) != WICED_BT_SUCCESS )
+    if ( wiced_hidd_gatts_init( blehid_db_data,
+                                blehid_db_size,
+                                blehid_gattAttributes,
+                                blehid_gattAttributes_size,
+                                blehid_app_gatts_req_read_callback,
+                                blehid_app_gatts_req_write_callback ) != WICED_BT_SUCCESS )
     {
         return WICED_BT_ERROR;
     }
@@ -75,34 +123,29 @@ wiced_result_t blehid_app_init(void)
     return WICED_BT_SUCCESS;
 }
 
-#if 0
+#ifdef ANDROID_AUDIO
 /*
  * bleremote ble link management callbacks
  */
 wiced_result_t bleremote_management_cback(wiced_bt_management_evt_t event, wiced_bt_management_evt_data_t *p_event_data)
 {
-    wiced_result_t result = WICED_BT_SUCCESS;
-    wiced_bt_device_address_t         bda = { 0 };
+    wiced_result_t result = WICED_RESUME_HIDD_LIB_HANDLER;
 
     switch( event )
     {
-        /* Bluetooth  stack enabled */
-        case BTM_ENABLED_EVT:
-            hci_control_le_enable_trace();
-            wiced_bt_dev_read_local_addr(bda);
-            WICED_BT_TRACE("\nAddress: [ %B]", bda);
-            blehid_app_init();
-            break;
-
-        default:
-            // we didn't handle this event, let default library handler to deal with it.
-            result = WICED_NOT_FOUND;
+        case BTM_ENCRYPTION_STATUS_EVT:
+            if (p_event_data->encryption_status.result == WICED_SUCCESS)
+            {
+                //configure ATT MTU size with peer device
+                wiced_bt_gatt_configure_mtu(ble_hidd_link.gatts_conn_id, wiced_bt_hid_cfg_settings.gatt_cfg.max_mtu_size);
+            }
+            // let default library to handle the reset
             break;
     }
     return result;
 }
 #else
-#define bleremote_management_cback NULL
+ #define bleremote_management_cback NULL
 #endif
 
 /*
@@ -113,13 +156,15 @@ wiced_result_t bleremote_management_cback(wiced_bt_management_evt_t event, wiced
 void application_start( void )
 {
     sfi_allow_deep_sleep();
+    app_LED_init();
 
     //restore content from AON memory
     bleremoteapp_aon_restore();
 
-    wiced_hidd_start(blehid_app_init, bleremote_management_cback, &wiced_bt_hid_cfg_settings, wiced_bt_hid_cfg_buf_pools);
+    wiced_hidd_start(app_init, bleremote_management_cback, &wiced_bt_hid_cfg_settings, wiced_bt_hid_cfg_buf_pools);
     hci_control_init(HCI_CONTROL_RPT_CNT, hci_rpt_db);
 
+    WICED_BT_TRACE("\nDEV=%d",wiced_hidd_chip());
     WICED_BT_TRACE("\nSLEEP_ALLOWED=%d",SLEEP_ALLOWED);
 
 #ifdef SUPPORT_SCROLL
@@ -137,6 +182,9 @@ void application_start( void )
     WICED_BT_TRACE("\nENABLE_AUDIO(ADPCM)");
  #else
     WICED_BT_TRACE("\nENABLE_AUDIO(mSBC)");
+ #endif
+ #ifdef ANDROID_AUDIO
+    WICED_BT_TRACE("--ANDROID");
  #endif
 #endif
 
@@ -179,4 +227,5 @@ void application_start( void )
  #endif
 #endif
 
+    wiced_hidd_led_blink(LED_BLUE, 5, 100);  // fast 5 blinks to indicate firmware is up and running
 }

@@ -43,6 +43,7 @@
 #include "wiced_bt_cfg.h"
 #include "wiced_bt_uuid.h"
 #include "ble_remote.h"
+#include "android_voice.h"
 #include "ble_remote_gatts.h"
 #include "wiced_hidd_micaudio.h"
 
@@ -61,9 +62,8 @@ const uint8_t   rpt_ref_battery[]             = {BATTERY_REPORT_ID ,0x01};
 const uint8_t   rpt_ref_std_key_input[]       = {STD_KB_REPORT_ID,0x01};
 const uint8_t   rpt_ref_std_key_output[]      = {STD_KB_REPORT_ID,0x02};
 const uint8_t   rpt_ref_bitmap[]              = {BITMAPPED_REPORT_ID,0x01};
-const uint8_t   rpt_ref_motion[]              = {MOTION_REPORT_ID,0x01};
 const uint8_t   rpt_ref_user_defined_0[]      = {MEDIA_REPORT_ID,0x01};
-#ifdef SUPPORT_AUDIO
+#ifdef HID_AUDIO
 const uint8_t   rpt_ref_voice[]               = {WICED_HIDD_VOICE_REPORT_ID, 0x01};
 const uint8_t   rpt_ref_voice_ctrl_input[]    = {WICED_HIDD_VOICE_CTL_REPORT_ID, 0x01};
 const uint8_t   rpt_ref_voice_ctrl_feature[]  = {WICED_HIDD_VOICE_CTL_REPORT_ID, 0x03}; //feature rpt, OK to change to output report. But need chang in host BSA.
@@ -84,14 +84,13 @@ extern uint8_t bleremote_connection_ctrl_rpt;
 
 extern uint8_t bleremote_key_std_rpt[];
 extern uint8_t bleremote_bitmap_rpt[];
-#ifdef SUPPORT_MOTION
-extern uint8_t bleremote_motion_rpt[];
-#endif
 
 extern uint8_t bleremote_user_defined_0_rpt[];
+#ifdef HID_AUDIO
 extern uint8_t bleremote_voice_rpt[];
 extern uint8_t bleremote_voice_ctrl_input_rpt[];
 extern uint8_t bleremote_voice_ctrl_feature_rpt[];
+#endif
 #ifdef SUPPORT_TOUCHPAD
 extern uint8_t bleremote_touchpad_rpt[];
 #endif
@@ -362,35 +361,6 @@ const uint8_t blehid_db_data[]=
         LEGATTDB_PERM_READABLE
     ),
 
-#ifdef SUPPORT_MOTION
-    // motion report
-    // Handle 0x68: characteristic HID Report, handle 0x69 characteristic value
-    CHARACTERISTIC_UUID16
-    (
-        HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_MOTION,
-        HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_MOTION_VAL,
-        GATT_UUID_HID_REPORT,
-        LEGATTDB_CHAR_PROP_READ|LEGATTDB_CHAR_PROP_NOTIFY,
-        LEGATTDB_PERM_READABLE
-    ),
-
-   // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
-    // Value modified shall be retained during connection and across connection // for bonded devices
-   CHAR_DESCRIPTOR_UUID16_WRITABLE
-    (
-        HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_MOTION_CHAR_CFG_DESCR,
-        GATT_UUID_CHAR_CLIENT_CONFIG,
-        LEGATTDB_PERM_READABLE|LEGATTDB_PERM_WRITE_CMD|LEGATTDB_PERM_WRITE_REQ
-    ),
-
-   // Handle 0x6B: report reference
-   CHAR_DESCRIPTOR_UUID16
-    (
-        HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_MOTION_RPT_REF_DESCR,
-        GATT_UUID_RPT_REF_DESCR,
-        LEGATTDB_PERM_READABLE
-    ),
-#endif
     // user defined 0 report
     // Handle 0x6C: characteristic HID Report, handle 0x6D characteristic value
     CHARACTERISTIC_UUID16
@@ -419,7 +389,7 @@ const uint8_t blehid_db_data[]=
         LEGATTDB_PERM_READABLE
     ),
 
-#ifdef SUPPORT_AUDIO
+#ifdef HID_AUDIO
     //Voice report
     // Handle 0x70: characteristic HID Report, handle 0x71 characteristic value
     CHARACTERISTIC_UUID16
@@ -564,16 +534,68 @@ const uint8_t blehid_db_data[]=
     ),
 #endif
 
+#ifdef ANDROID_AUDIO
+    // Handle 0xfe00: Android TV Voice Service
+    PRIMARY_SERVICE_UUID128
+        ( HANDLE_ATV_VOICE_SERVICE, UUID_ATV_VOICE_SERVICE),
+
+    // Handle 0xfe01: Write Characteristic (ATVV_CHAR_TX), handle 0xfe02 characteristic value
+    CHARACTERISTIC_UUID128_WRITABLE
+    (
+        HANDLE_ATV_VOICE_TX_CHARACTERISTIC,
+        HANDLE_ATV_VOICE_TX_CHARACTERISTIC_VALUE,
+        UUID_ATV_VOICE_TX_CHARACTERISTIC,
+        LEGATTDB_CHAR_PROP_WRITE,
+        LEGATTDB_PERM_VARIABLE_LENGTH | LEGATTDB_PERM_WRITE_REQ  | LEGATTDB_PERM_AUTH_WRITABLE
+    ),
+
+    // Handles 0xfe03: Read characteristic (ATVV_CHAR_RX), handle 0xfe04 characteristic value.
+    CHARACTERISTIC_UUID128
+    (
+        HANDLE_ATV_VOICE_RX_CHARACTERISTIC,
+        HANDLE_ATV_VOICE_RX_CHARACTERISTIC_VALUE,
+        UUID_ATV_VOICE_RX_CHARACTERISTIC,
+        LEGATTDB_CHAR_PROP_NOTIFY | LEGATTDB_CHAR_PROP_READ,
+        LEGATTDB_PERM_VARIABLE_LENGTH | LEGATTDB_PERM_READABLE
+    ),
+
+    // Handle 0xfe05
+    CHAR_DESCRIPTOR_UUID16_WRITABLE
+    (
+        HANDLE_ATV_VOICE_RX_CLIENT_CONFIGURATION_DESCRIPTOR,
+        UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION,
+        LEGATTDB_PERM_READABLE | LEGATTDB_PERM_WRITE_CMD | LEGATTDB_PERM_WRITE_REQ | LEGATTDB_PERM_AUTH_WRITABLE
+    ),
+
+    // Handles 0xfe06: Read characteristic (ATVV_CHAR_RX), handle 0xfe07 characteristic value.
+    CHARACTERISTIC_UUID128
+    (
+        HANDLE_ATV_VOICE_CTL_CHARACTERISTIC,
+        HANDLE_ATV_VOICE_CTL_CHARACTERISTIC_VALUE,
+        UUID_ATV_VOICE_CTL_CHARACTERISTIC,
+        LEGATTDB_CHAR_PROP_NOTIFY | LEGATTDB_CHAR_PROP_READ,
+        LEGATTDB_PERM_VARIABLE_LENGTH | LEGATTDB_PERM_READABLE
+    ),
+
+    // Handle 0xfe08
+    CHAR_DESCRIPTOR_UUID16_WRITABLE
+    (
+        HANDLE_ATV_VOICE_CTL_CLIENT_CONFIGURATION_DESCRIPTOR,
+        UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION,
+        LEGATTDB_PERM_READABLE | LEGATTDB_PERM_WRITE_CMD | LEGATTDB_PERM_WRITE_REQ | LEGATTDB_PERM_AUTH_WRITABLE
+    ),
+#endif
+
 #ifdef OTA_FIRMWARE_UPGRADE
-#ifdef OTA_SECURE_FIRMWARE_UPGRADE
+ #ifdef OTA_SECURE_FIRMWARE_UPGRADE
     // Handle 0xff00: Cypress vendor specific WICED Secure OTA Upgrade Service.
     PRIMARY_SERVICE_UUID128
         (HANDLE_OTA_FW_UPGRADE_SERVICE, UUID_OTA_SEC_FW_UPGRADE_SERVICE),
-#else
+ #else
     // Handle 0xff00: Cypress vendor specific WICED OTA Upgrade Service.
     PRIMARY_SERVICE_UUID128
         ( HANDLE_OTA_FW_UPGRADE_SERVICE, UUID_OTA_FW_UPGRADE_SERVICE ),
-#endif
+ #endif
     // Handles 0xff03: characteristic WS Control Point, handle 0xff04 characteristic value.
     CHARACTERISTIC_UUID128_WRITABLE
     (
@@ -654,6 +676,36 @@ const uint8_t blehid_rpt_map[] =
                 0x81 , 0x00,                    //    INPUT (Data,Ary,Abs)
                 0xC0,                           // END_COLLECTION
 
+#ifdef ANDROID_AUDIO
+                //Bit mapped report, BITMAPPED_REPORT_ID
+                0x05 , 0x01,                    // USAGE_PAGE (Generic Desktop)
+                0x09 , 0x05,                    // USAGE (Game Pad)
+                0xA1 , 0x01,                    // COLLECTION (Application)
+                0x85 , BITMAPPED_REPORT_ID,     //    REPORT_ID (2)
+                0x05 , 0x0C,                    //    USAGE_PAGE (Consumer Devices)
+                0x15 , 0x00,                    //    LOGICAL_MINIMUM (0)
+                0x25 , 0x01,                    //    LOGICAL_MAXIMUM (1)
+                0x75 , 0x01,                    //    REPORT_SIZE (1)
+                0x95 , 0x12,                    //    REPORT_COUNT (11)
+                //byte 0
+                0x0A , 0x24 , 0x02,             //0   USAGE (AC Back)
+                0x0A , 0x23 , 0x02,             //1   USAGE (AC Home)
+                0x0A , 0x21 , 0x02,             //2   USAGE (AC Search)
+                0x0A , 0x44 , 0x00,             //3   USAGE (Menu Left)
+                0x0A , 0x42 , 0x00,             //4   USAGE (Menu Up)
+                0x0A , 0x43 , 0x00,             //5   USAGE (Menu Down)
+                0x0A , 0xEA , 0x00,             //6   USAGE (Volume Down)
+                0x0A , 0xE9 , 0x00,             //7   USAGE (Volume Up)
+                // byte 1
+                0x0A , 0x45 , 0x00,             //8   USAGE (Menu Right)
+                0x0A , 0x41 , 0x00,             //9   USAGE (Menu Pick)
+                0x09 , 0xCD,                    //10  USAGE (Play/Pause)
+                0x81 , 0x02,                    //    INPUT (Data,Var,Abs)
+                0x95 , 0x01,                    //    REPORT_COUNT (1)
+                0x75 , 0x05,                    //    REPORT_SIZE (5)
+                0x81 , 0x03,                    //    INPUT (Cnst,Var,Abs)
+                0xC0,                           // END_COLLECTION
+#else
                 //Bit mapped report, BITMAPPED_REPORT_ID
                 0x05 , 0x0C,                    // USAGE_PAGE (Consumer Devices)
                 0x09 , 0x01,                    // USAGE (Consumer Control)
@@ -689,55 +741,6 @@ const uint8_t blehid_rpt_map[] =
                 0x75 , 0x06,                    //    REPORT_SIZE (6)
                 0x81 , 0x03,                    //    INPUT (Cnst,Var,Abs)
                 0xC0,                           // END_COLLECTION
-#ifdef SUPPORT_MOTION
-#ifdef USE_MOTION_AS_AIR_MOUSE
-                0x05, 0x01,             //    Usage Page (Generic Desktop),
-                0x09, 0x02,             //    Usage (Mouse),
-                0xA1, 0x01,             //    Collection: (Application),
-                0x85, RPT_ID_MOUSE,             //        REPORT_ID (2)
-                0x09, 0x01,             //        Usage (Pointer),
-                0xA1, 0x00,             //        Collection: (Linked),
-                0x05, 0x09,             //            Usage Page (Buttons),
-                0x19, 0x01,             //            Usage Minimum (01),
-                0x29, 0x03,             //            Usage Maximum (03),
-                0x15, 0x00,             //            Log Min (0),
-                0x25, 0x01,             //            Log Max (1),
-                0x75, 0x01,             //            Report Size (1),
-                0x95, 0x03,             //            Report Count (03),
-                0x81, 0x02,             //            Input (Data, Variable, Absolute),
-                0x75, 0x05,             //            Report Size (5),
-                0x95, 0x01,             //            Report Count (1),
-                0x81, 0x01,             //            Input (Constant),
-                0x05, 0x01,             //            Usage Page (Generic Desktop),
-                0x09, 0x30,             //            Usage (X),
-                0x09, 0x31,             //            Usage (Y),
-                0x15, 0x81,             //            Logical min (-127),
-                0x25, 0x7F,             //            Logical Max (127),
-                0x75, 0x08,             //            Report Size (8),
-                0x95, 0x02,             //            Report Count (2) (X,Y)
-                0x81, 0x06,             //            Input (Data, Variable, Relative),
-                0x09, 0x38,             //            Usage (Wheel),
-                0x15, 0x81,             //            Logical min (-127),
-                0x25, 0x7F,             //            Logical Max (127),
-                0x75, 0x08,             //            Report Size (8),
-                0x95, 0x01,             //            Report Count (1) (Wheel)
-                0x81, 0x06,             //            Input (Data, Variable, Relative),
-                0xC0,                    //        END_COLLECTION (Logical)
-                0xC0,                    //        END_COLLECTION
-#else
-                //motion report,  MOTION_REPORT_ID
-                0x05 , 0x0C,                    // Usage Page (Consumer Devices)
-                0x09 , 0x01,                    //    Usage (Consumer Control)
-                0xA1 , 0x01,                    // COLLECTION (Application)
-                0x85 , MOTION_REPORT_ID,        //    REPORT_ID (0x08)
-                //0x95 , 0x12,                  //    REPORT_COUNT (18)
-                0x95 , MOTIONRPT_MAX_DATA,      //    REPORT_COUNT (18)
-                0x75 , 0x08,                    //    REPORT_SIZE (8)
-                0x15 , 0x00,                    //    LOGICAL_MINIMUM (0)
-                0x26 , 0xFF , 0x00,             //    LOGICAL_MAXIMUM (255)
-                0x81 , 0x00,                    //    INPUT (Data,Ary,Abs)
-                0xC0,                           // END_COLLECTION
-#endif
 #endif
                 //User defined 0 report, 0x0A
                 0x05 , 0x0C,                    // Usage Page (Consumer Devices)
@@ -754,6 +757,7 @@ const uint8_t blehid_rpt_map[] =
                 0x81 , 0x00,                    //    INPUT (Data,Ary,Abs)
                 0xC0,                           // END_COLLECTION
 
+#ifdef HID_AUDIO
                 //audio report, WICED_HIDD_VOICE_REPORT_ID
                 0x05 , 0x0C,                    // Usage Page (Consumer Devices)
                 0x09 , 0x01,                    //    Usage (Consumer Control)
@@ -786,6 +790,7 @@ const uint8_t blehid_rpt_map[] =
                 0x26 , 0xFF , 0x00,             //    LOGICAL_MAXIMUM (255)
                 0xB1 , 0x00,                    //    FEATURE (Data,Ary,Abs)
                 0xC0,                           // END_COLLECTION
+#endif
 
 #ifdef SUPPORT_TOUCHPAD
                 //touchpad report,  RPT_ID_IN_ABS_XY
@@ -945,25 +950,6 @@ const attribute_t blehid_gattAttributes[] =
         rpt_ref_bitmap //fixed
     },
 
-#ifdef SUPPORT_MOTION
-    {
-        HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_MOTION_VAL,
-        MOTIONRPT_MAX_DATA,
-        bleremote_motion_rpt //updated everytime a motion report sent
-    },
-
-    {
-       HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_MOTION_CHAR_CFG_DESCR,
-        2,
-        &characteristic_client_configuration[3]  //bit mask: KBAPP_CLIENT_CONFIG_NOTIF_MOTION_RPT                (0x08)
-    },
-
-    {
-       HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_MOTION_RPT_REF_DESCR,
-        2,
-        rpt_ref_motion //fixed
-    },
-#endif
     {
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_USER_DEFINED_0_VAL,
         8,
@@ -982,7 +968,7 @@ const attribute_t blehid_gattAttributes[] =
         rpt_ref_user_defined_0  //fixed
     },
 
-#ifdef SUPPORT_AUDIO
+#ifdef HID_AUDIO
     {
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_VOICE_VAL,
 #ifdef ATT_MTU_SIZE_180
@@ -1156,6 +1142,36 @@ KbAppConfig kbAppConfig =
 *****************************************************************************/
 KbKeyConfig kbKeyConfig[] =
 {
+#if is_20735Family // 5x4
+ #ifdef ANDROID_AUDIO
+    // Column 0:  order is row0 ->row4
+    {KEY_TYPE_STD,              0x1e},  //#0, 1
+    {KEY_TYPE_BIT_MAPPED,       4},     //#1, 2 (menu up)
+    {KEY_TYPE_STD,              0x20},  //#2, 3
+    {KEY_TYPE_BIT_MAPPED,       6},     //#3, VOL_DOWN
+    {KEY_TYPE_BIT_MAPPED,       9},     //#4, ENTER touchpad
+
+    // Column 1: order is row0 ->row4
+    {KEY_TYPE_BIT_MAPPED,       3},     //#5, 4 (menu left)
+    {KEY_TYPE_STD,              0x22},  //#6, 5
+    {KEY_TYPE_BIT_MAPPED,       8},     //#7, 6 (menu right)
+    {KEY_TYPE_BIT_MAPPED,       10},    //#8, MUTE
+    {KEY_TYPE_BIT_MAPPED,       0},     //#9, BACK
+
+   // Column 2: order is row0 ->row4
+    {KEY_TYPE_STD,              0x24},  //#10, 7
+    {KEY_TYPE_BIT_MAPPED,       5},     //#11, 8 (menu down)
+    {KEY_TYPE_STD,              0x26},  //#12, 9
+    {KEY_TYPE_BIT_MAPPED,       7},     //#13, VOL_UP
+    {KEY_TYPE_BIT_MAPPED,       1},     //#14, HOME
+
+    // Column 3: order is row0 ->row4
+    {KEY_TYPE_STD,              0x27},  //#15, 0
+    {KEY_TYPE_BIT_MAPPED,       2},     //#16, AUDIO
+    {KEY_TYPE_STD,              0x66},  //#17, PWR
+    {KEY_TYPE_USER_DEF_3,       0},     //#18, Heart (discoverable)
+    {KEY_TYPE_BIT_MAPPED,       0},     //#19, EXIT
+ #else
     // Column 0:  order is row0 ->row4
     {KEY_TYPE_STD,              0x1e},  //#0, 1
     {KEY_TYPE_STD,              0x1f},  //#1, 2
@@ -1184,6 +1200,85 @@ KbKeyConfig kbKeyConfig[] =
     {KEY_TYPE_USER_DEF_3,          0},  //#18, Heart (discoverable)
     {KEY_TYPE_USER_DEF_0,       0x94},  //#19, EXIT
 
+    // Column 4: order is row0 ->row4
+    // This column defines the virtual keys for touchpad
+    {KEY_TYPE_STD,              0x28},  //#20, CENTER
+    {KEY_TYPE_STD,              0x4f},  //#21, VIRTUAL RIGHT
+    {KEY_TYPE_STD,              0x50},  //#22, VIRTUAL LEFT
+    {KEY_TYPE_NONE,             0x51},  //#23, VIRTUAL DOWN
+    {KEY_TYPE_STD,              0x52},  //#24, VIRTUAL UP
+  #endif
+#else // 7x7
+    // Column 0:  order is row0 ->row6
+    {KEY_TYPE_NONE,             USB_USAGE_NO_EVENT},    //0  #KB1,     TV_POWER --> IR
+    {KEY_TYPE_NONE,             USB_USAGE_NO_EVENT},    //1  #KB8,     Touch_on/off
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_PLAY_PAUSE},     //2  #KB15,    Play
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_AC_HOME},        //3  #KB22,    Home
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_MENU_RIGHT},     //4  #KB29,    Right
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_CH},             //5  #KB36,    Chnnel Chart
+    {KEY_TYPE_STD,              USB_USAGE_7},           //6  ##KB43,    7
+
+    // Column 1: order is row0 ->row6
+    {KEY_TYPE_STD,              USB_USAGE_VOL_UP},      //7  #KB2,     TV Volume UP
+    {KEY_TYPE_STD,              USB_USAGE_MENU},        //8  #KB9,     Menu
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_FAST_FORWD},     //9  #KB16,    >>
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_VIEW_TGL},       //10 #KB23,    Multview
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_MENU_DOWN},      //11 #KB30,    Down
+    {KEY_TYPE_STD,              USB_USAGE_1},           //12 #KB37,    1
+    {KEY_TYPE_STD,              USB_USAGE_8},           //13 #KB44,    8
+
+    // Column 2: order is row0 ->row6
+    {KEY_TYPE_STD,              USB_USAGE_VOL_DOWN},    //14 #KB3,     TV Volume Down
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_ODR_MOVIE},      //15 #KB10,    Movie
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_PREV_TRACK},     //16 #KB17,    |<<
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_CH_UP},          //17 #KB24,    Channel UP
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_AC_BACK},        //18 #KB31,    Exit
+    {KEY_TYPE_STD,              USB_USAGE_2},           //19 #KB38,    2
+    {KEY_TYPE_STD,              USB_USAGE_9},           //20 #KB45,    9
+
+    // Column 3: order is row0 ->row6
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_POWER},          //21 #KB4,     Power
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_REVIEW},         //22 #KB11,    Review
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_AC_SEARCH},      //23 #KB18,    Voice
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_CH_DOWN},        //24 #KB25,    Channel Down
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_PREVIOUS},       //25 #KB32,    Previous
+    {KEY_TYPE_STD,              USB_USAGE_3},           //26 #KB39,    3
+    {KEY_TYPE_STD,              USB_USAGE_5},           //27 #KB46,    *
+
+    // Column 4: order is row0 ->row6
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_POWER},          //28 #KB5,     STB Power
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_SHOPPING},       //29 #KB12,    Shopping
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_NEXT_TRACK},     //30 #KB19,    >>|
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_MENU_UP},        //31 #KB26,    Up
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_MENU},           //32 #KB33,    Option
+    {KEY_TYPE_STD,              USB_USAGE_4},           //33 #KB40,    4
+    {KEY_TYPE_STD,              USB_USAGE_0},           //34 #KB47,    0
+
+    // Column 5: order is row0 ->row6
+    {KEY_TYPE_STD,              USB_USAGE_MUTE},        //35 #KB6,     Mute
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_REWIND},         //36 #KB13,    <<
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_MENU_LEFT},      //37 #KB20,    Volume Up
+    {KEY_TYPE_STD,              USB_USAGE_LEFT_ARROW},  //38 #KB27,    Left
+    {KEY_TYPE_STD,              USB_USAGE_ENTER},       //39 #KB34,    Search
+    {KEY_TYPE_STD,              USB_USAGE_5},           //40 #KB41,    5
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_NUMBER},         //41 #KB48,    #
+
+    // Column 6: order is row0 ->row6
+    {KEY_TYPE_STD,              USB_USAGE_NO_EVENT},    //42 #KB7,     Input
+    {KEY_TYPE_STD,              USB_USAGE_STOP},        //43 #KB14,    Stop
+    {KEY_TYPE_STD,              USB_USAGE_VOL_DOWN},    //44 #KB21,    Volume Down
+    {KEY_TYPE_STD,              USB_USAGE_ENTER},       //45 #KB28,    OK
+    {KEY_TYPE_BIT_MAPPED,       BITMAP_CH},             //46 #KB35,    Fav Channel
+    {KEY_TYPE_STD,              USB_USAGE_6},           //47 #KB42,    6
+    {KEY_TYPE_NONE,             USB_USAGE_NO_EVENT},    //48 #KB49,    N/A
+
+    // This column defines the virtual keys for touchpad
+    {KEY_TYPE_STD,              USB_USAGE_ENTER},       // VIRTUAL CENTER
+    {KEY_TYPE_STD,              USB_USAGE_RIGHT_ARROW}, // VIRTUAL RIGHT
+    {KEY_TYPE_STD,              USB_USAGE_LEFT_ARROW},  // VIRTUAL LEFT
+    {KEY_TYPE_STD,              USB_USAGE_DOWN_ARROW},  // VIRTUAL DOWN
+    {KEY_TYPE_STD,              USB_USAGE_UP_ARROW},    // VIRTUAL UP
+#endif
     // Column 4: order is row0 ->row4
     // This column defines the virtual keys for touchpad
     {KEY_TYPE_STD,              0x28},  //#20, CENTER
@@ -1298,34 +1393,39 @@ RemoteAppConfig remoteAppConfig =
 wiced_hidd_microphone_enhanced_config_t blehid_audiocfg =
 {
     //# audio enc type: 0=PCM, 1=mSBC, 2=OPUS CELT, 3=ADPCM
-#ifdef ADPCM_ENCODER
+   .audioEncType =
+ #ifdef ADPCM_ENCODER
     3,
-#endif
-#ifdef CELT_ENCODER
+ #endif
+ #ifdef CELT_ENCODER
     2,
-#endif
-#ifdef SBC_ENCODER
+ #endif
+ #ifdef SBC_ENCODER
     1,
-#endif
+ #endif
 
-    {
+   .drcSettings =
+   {
     //# DRC settings
-    1,              // 1 Enable DRC, 0 Disable DRC
-    0x02EE,     // Wait time in mSec, 0x2EE = 750 mSec.
-    70,             // Knee 1, 68.5dB,       2660, in 1/2 dB steps.  10^((RSSI_target/2 + 30)/20).
-    85,              // Knee 2, 75dB,         5623, in 1/2 dB steps.  10^((RSSI_target/2 + 30)/20).
-    95,             // Knee 3, 81dB,        11220, in 1/2 dB steps.  10^((RSSI_target/2 + 30)/20).
-    0x03E8,     // Attack time in mSec.  0x03E8 = 1000 mSec
-    0x001F,     // Decay time in mSec.  0x001F = 31 mSec.
-    0x6800,     // Saturation Level, 0x6800 = 26624.  This will be the max output level.
+    .enable = 1,              // 1 Enable DRC, 0 Disable DRC
+    .waitTime = 0x02EE,     // Wait time in mSec, 0x2EE = 750 mSec.
+    .knee1 = 70,             // Knee 1, 68.5dB,       2660, in 1/2 dB steps.  10^((RSSI_target/2 + 30)/20).
+    .knee2 = 85,              // Knee 2, 75dB,         5623, in 1/2 dB steps.  10^((RSSI_target/2 + 30)/20).
+    .knee3 = 95,             // Knee 3, 81dB,        11220, in 1/2 dB steps.  10^((RSSI_target/2 + 30)/20).
+    .attackTime = 0x03E8,     // Attack time in mSec.  0x03E8 = 1000 mSec
+    .decayTime = 0x001F,     // Decay time in mSec.  0x001F = 31 mSec.
+    .saturationLevel = 0x6800,     // Saturation Level, 0x6800 = 26624.  This will be the max output level.
                // The DRC will behave like an AGC when the DRC curve exceeds this amount.
                // This value will be used when the pga gain is set lower than 18dB by the DRC loop.
     },
     //# DRC custom gain boost. Default value = 1000
-    1496,
+    .custom_gain_boost = 1496,
     //# End of DRC settings
 
-#ifdef ENABLE_ADC_AUDIO_ENHANCEMENTS
+ #ifdef ENABLE_ADC_AUDIO_ENHANCEMENTS
+    .audioFilterData =
+    {
+    .audio_aux_filter_coef = {
     //#Anti Alias Audio Filter Coefficients.  Set index 0 to 0x00 0x00 for default filter settings
     0x6D00,  //#index 0
     0xB5FF,  //#index 1
@@ -1346,17 +1446,22 @@ wiced_hidd_microphone_enhanced_config_t blehid_audiocfg =
     0x1204,  //#index 16
     0x5D28,  //#index 17
     0xD53B,  //#index 18
+    },
     //#End of Anti Alias Audio Filter Coefficients.
 
-
+    .biQuadEqFilterCoeffs = { 0 },
     /*# EQ Filter 1, 116 Coefficients(int16_t)
     #        1       2          3        4         5          6         7         8        9         10
     #    LSB  MSB LSB  MSB   LSB  MSB LSB  MSB  LSB  MSB  LSB  MSB  LSB  MSB  LSB  MSB  LSB  MSB  LSB  MSB
     #   --------- --------- --------- --------- --------- --------- --------- --------- --------- ---------
     #   To disable EQ filter, set the first two bytes below to 0.
     #   Customer should fill in the actually EQ coeff's based on specific test setup and HW */
-    0,
-#endif
+    .eqFilter =
+    {
+      .coeff = {0},
+    },
+    },
+ #endif
 };
 #endif
 
@@ -1369,7 +1474,7 @@ const wiced_bt_cfg_settings_t wiced_bt_hid_cfg_settings =
     .device_class                        = {0x00, 0x05, 0xc0},                                         /**< Local device class */
     .security_requirement_mask           = BTM_SEC_ENCRYPT,                                            /**< Security requirements mask (BTM_SEC_NONE, or combinination of BTM_SEC_IN_AUTHENTICATE, BTM_SEC_OUT_AUTHENTICATE, BTM_SEC_ENCRYPT (see #wiced_bt_sec_level_e)) */
 
-    .max_simultaneous_links              = 1,                                                          /**< Maximum number simultaneous links to different devices */
+    .max_simultaneous_links              = 2,                                                          /**< Maximum number simultaneous links to different devices */
 
     .br_edr_scan_cfg =                                              /* BR/EDR scan config */
     {
@@ -1434,7 +1539,7 @@ const wiced_bt_cfg_settings_t wiced_bt_hid_cfg_settings =
 #endif
         .low_duty_min_interval           = 48,             /**< Low duty undirected connectable minimum advertising interval */
         .low_duty_max_interval           = 48,             /**< Low duty undirected connectable maximum advertising interval */
-#if defined(ALLOW_SDS_IN_DISCOVERABLE) || (defined(ENDLESS_LE_ADVERTISING_WHILE_DISCONNECTED) && defined(SUPPORT_EPDS))
+#if defined(ALLOW_SDS_IN_DISCOVERABLE) || defined(ENDLESS_LE_ADVERTISING_WHILE_DISCONNECTED)
         .low_duty_duration               = 0,                                                          /**< Low duty undirected connectable advertising duration in seconds (0 for infinite) */
 #else
         .low_duty_duration               = 180,                                                        /**< Low duty undirected connectable advertising duration in seconds (0 for infinite) */
@@ -1459,7 +1564,7 @@ const wiced_bt_cfg_settings_t wiced_bt_hid_cfg_settings =
     {
         .appearance                     = APPEARANCE_GENERIC_TAG,                                      /**< GATT appearance (see gatt_appearance_e) */
         .client_max_links               = 1,                                                           /**< Client config: maximum number of servers that local client can connect to  */
-        .server_max_links               = 1,                                                           /**< Server config: maximum number of remote clients connections allowed by the local */
+        .server_max_links               = 2,                                                           /**< Server config: maximum number of remote clients connections allowed by the local */
         .max_attr_len                   = 246,                                                         /**< Maximum attribute length; gki_cfg must have a corresponding buffer pool that can hold this length */
 #if !defined(CYW20706A2)
         .max_mtu_size                   = 251                                                          /**< Maximum MTU size for GATT connections, should be between 23 and (max_attr_len + 5) */
@@ -1521,7 +1626,7 @@ const wiced_bt_cfg_settings_t wiced_bt_hid_cfg_settings =
     .rpa_refresh_timeout                = WICED_BT_CFG_DEFAULT_RANDOM_ADDRESS_NEVER_CHANGE,            /**< Interval of  random address refreshing - secs */
 #endif
     /* BLE white list size */
-    .ble_white_list_size                = 0,                                                           /**< Maximum number of white list devices allowed. Cannot be more than 128 */
+    .ble_white_list_size                = 2,                                                           /**< Maximum number of white list devices allowed. Cannot be more than 128 */
 #endif
 
 #if defined(CYW20719B2) || defined(CYW20721B2) || defined(CYW20819A1) || defined (CYW20820A1)
@@ -1545,7 +1650,7 @@ const wiced_bt_cfg_buf_pool_t wiced_bt_hid_cfg_buf_pools[WICED_BT_CFG_NUM_BUF_PO
 #ifdef CYW20735B1           // we need to allocate more buffer to ensure audio quality
     { 300,      50  },      /* Large Buffer Pool  (used for HCI ACL messages) */
 #else                       // 20819 doesn't have enough RAM. audio quality is problematic
-    { 300,      8  },      /* Large Buffer Pool  (used for HCI ACL messages) */
+    { 300,      10  },      /* Large Buffer Pool  (used for HCI ACL messages) */
 #endif
-    { 1024,      2  },      /* Extra Large Buffer Pool - Used for avdt media packets and miscellaneous (if not needed, set buf_count to 0) */
+    { 720,      1  },      /* Extra Large Buffer Pool - Used for avdt media packets and miscellaneous (if not needed, set buf_count to 0) */
 };

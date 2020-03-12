@@ -100,10 +100,6 @@ void application_start( void )
     WICED_BT_TRACE("\nENABLE_SCROLL");
 #endif
 
-#ifdef SUPPORT_MOTION
-    WICED_BT_TRACE("\nENABLE_MOTION");
-#endif
-
 #ifdef OTA_FIRMWARE_UPGRADE
     WICED_BT_TRACE("\nOTA_FW_UPGRADE");
  #ifdef OTA_SECURE_FIRMWARE_UPGRADE

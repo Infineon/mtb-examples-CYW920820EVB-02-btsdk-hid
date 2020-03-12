@@ -83,10 +83,11 @@
 #endif
 
 #ifdef SUPPORT_AUDIO
-#include "wiced_hidd_micaudio.h"
+ #include "wiced_hidd_micaudio.h"
+ #include "android_voice.h"
 
-#define AUDIO_FIFO_CNT    10
-#define audioIsActive()   (wiced_hidd_mic_audio_is_active())
+ #define AUDIO_FIFO_CNT    10  // 30 in android_o_remote
+ #define audioIsActive()   (wiced_hidd_mic_audio_is_active())
 
 wiced_hidd_voice_report_t audioData[AUDIO_FIFO_CNT] = {0,};
 uint16_t    dataCount[AUDIO_FIFO_CNT] = {0,};
@@ -94,7 +95,7 @@ wiced_hidd_microphone_config_t audioConfig;
 
 extern wiced_hidd_microphone_enhanced_config_t blehid_audiocfg;
 #else
-#define audioIsActive()     0
+ #define audioIsActive()     0
 #endif
 
 extern UINT16 wiced_bt_buffer_poolutilization (UINT8 pool_id);
@@ -108,18 +109,6 @@ uint8_t  vKeyIndexCode[ZONE_MAX_COUNT]  = {VKEY_INDEX_CENTER, VKEY_INDEX_RIGHT, 
 uint8_t  bleremote_touchpad_rpt[TOUCHPAD_RPT_PAYLOAD_SIZE] = {0, };
 #else
 #define touchpadIsActive()    0
-#endif
-
-#ifdef SUPPORT_MOTION
-#define motionIsEnabled() (motionsensor && motionsensor->isEnabled())
-#define motionIsActive()  (motionsensor && motionsensor->isActive())
-
-MotionSensorICM_c        * motionsensor  = NULL;
-uint8_t bleremote_motion_rpt[MOTIONRPT_MAX_DATA] = {0, };
-extern MotionSensorICM_mode_t motion_mode;
-#else
-#define motionIsEnabled() 0
-#define motionIsActive()  0
 #endif
 
 #ifdef SUPPORT_IR
@@ -190,11 +179,9 @@ wiced_blehidd_report_gatt_characteristic_t bleRemoteReportModeGattMap[] =
     {BITMAPPED_REPORT_ID,   WICED_HID_REPORT_TYPE_INPUT ,   HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_BITMAP_VAL,             FALSE,NULL, KBAPP_CLIENT_CONFIG_NOTIF_BIT_MAPPED_RPT},
     // Battery Input report
     {BATTERY_REPORT_ID  ,   WICED_HID_REPORT_TYPE_INPUT ,   HANDLE_BLEREMOTE_BATTERY_SERVICE_CHAR_LEVEL_VAL,                FALSE,NULL, KBAPP_CLIENT_CONFIG_NOTIF_BATTERY_RPT},
-    //motion report
-    {MOTION_REPORT_ID   ,   WICED_HID_REPORT_TYPE_INPUT ,   HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_MOTION_VAL,             FALSE,NULL, KBAPP_CLIENT_CONFIG_NOTIF_MOTION_RPT},
     //user defined 0 key report
     {0x0A,                  WICED_HID_REPORT_TYPE_INPUT ,   HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_USER_DEFINED_0_VAL,     FALSE,NULL, KBAPP_CLIENT_CONFIG_NOTIF_USER_DEFINED_KEY_RPT},
-#ifdef SUPPORT_AUDIO
+#ifdef HID_AUDIO
     //voice report
     {WICED_HIDD_VOICE_REPORT_ID, WICED_HID_REPORT_TYPE_INPUT, HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_VOICE_VAL,            FALSE,NULL, KBAPP_CLIENT_CONFIG_NOTIF_VOICE_RPT},
     //voice ctrl report
@@ -212,9 +199,8 @@ wiced_blehidd_report_gatt_characteristic_t bleRemoteReportModeGattMap[] =
     {0xFF, WICED_HID_CLIENT_CHAR_CONF, HANDLE_BLEREMOTE_BATTERY_SERVICE_CHAR_CFG_DESCR,                            FALSE,bleremoteapp_clientConfWriteBatteryRpt  ,KBAPP_CLIENT_CONFIG_NOTIF_NONE},
     {0xFF, WICED_HID_CLIENT_CHAR_CONF, HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_STD_INPUT_CHAR_CFG_DESCR,           FALSE,bleremoteapp_clientConfWriteRptStd      ,KBAPP_CLIENT_CONFIG_NOTIF_NONE},
     {0xFF, WICED_HID_CLIENT_CHAR_CONF, HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_BITMAP_CHAR_CFG_DESCR,              FALSE,bleremoteapp_clientConfWriteRptBitMapped,KBAPP_CLIENT_CONFIG_NOTIF_NONE},
-    {0xFF, WICED_HID_CLIENT_CHAR_CONF, HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_MOTION_CHAR_CFG_DESCR,              FALSE,bleremoteapp_clientConfWriteRptMotion,          KBAPP_CLIENT_CONFIG_NOTIF_NONE},
     {0xFF, WICED_HID_CLIENT_CHAR_CONF, HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_USER_DEFINED_0_CHAR_CFG_DESCR,      FALSE,bleremoteapp_clientConfWriteRptUserDefinedKey,  KBAPP_CLIENT_CONFIG_NOTIF_NONE},
-#ifdef SUPPORT_AUDIO
+#ifdef HID_AUDIO
     {0xFF, WICED_HID_CLIENT_CHAR_CONF, HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_VOICE_CHAR_CFG_DESCR,               FALSE,bleremoteapp_clientConfWriteRptVoice,           KBAPP_CLIENT_CONFIG_NOTIF_NONE},
     {0xFF, WICED_HID_CLIENT_CHAR_CONF, HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_VOICE_CTRL_INPUT_CHAR_CFG_DESCR,    FALSE,bleremoteapp_clientConfWriteRptVoiceCtrl,       KBAPP_CLIENT_CONFIG_NOTIF_NONE},
 #endif
@@ -242,16 +228,22 @@ uint8_t firstTransportStateChangeNotification = 1;
 uint8_t bleremote_user_defined_0_rpt[8] = {0, };
 #ifdef SUPPORT_AUDIO
  #ifdef ATT_MTU_SIZE_180
-uint8_t bleremote_voice_rpt[WICED_HIDD_MIC_AUDIO_BUFFER_SIZE*2+1] = {0,};
+  uint8_t bleremote_voice_rpt[WICED_HIDD_MIC_AUDIO_BUFFER_SIZE*2+1] = {0,};
  #else
-uint8_t bleremote_voice_rpt[20] = {0,};
+  uint8_t bleremote_voice_rpt[20] = {0,};
  #endif
-uint8_t bleremote_voice_ctrl_input_rpt[sizeof(wiced_hidd_voice_control_report_t)-1] = {0,};
-uint8_t bleremote_voice_ctrl_feature_rpt[sizeof(wiced_hidd_voice_control_report_t)-1] = {0,};
+
+ #ifdef HID_AUDIO
+  uint8_t bleremote_voice_ctrl_input_rpt[sizeof(wiced_hidd_voice_control_report_t)-1] = {0,};
+  uint8_t bleremote_voice_ctrl_feature_rpt[sizeof(wiced_hidd_voice_control_report_t)-1] = {0,};
+ #endif
+
+ #ifndef AUDIO_KEY_PRESS_AND_HOLD
+  wiced_timer_t mic_open_command_pending_timer;
+ #endif
+ wiced_timer_t mic_stop_command_pending_timer;
 #endif
 
-wiced_timer_t allow_sleep_timer;
-wiced_timer_t mic_stop_command_pending_timer;
 wiced_timer_t bleremote_conn_param_update_timer;
 
 #ifdef OTA_FIRMWARE_UPGRADE
@@ -270,7 +262,7 @@ void bleremote_setUpAdvData(void)
 {
     wiced_bt_ble_advert_elem_t bleremote_adv_elem[4];
     uint8_t bleremote_adv_flag = BTM_BLE_LIMITED_DISCOVERABLE_FLAG | BTM_BLE_BREDR_NOT_SUPPORTED;
-    uint16_t bleremote_adv_appearance = APPEARANCE_GENERIC_HID_DEVICE;
+    uint16_t bleremote_adv_appearance = APPEARANCE_GENERIC_REMOTE_CONTROL;
     uint16_t bleremote_adv_service = UUID_SERVCLASS_LE_HID;
 
     // flag
@@ -312,16 +304,6 @@ void bleremoteapp_allowIrTx_timeout( uint32_t arg)
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
-/// This function is the timeout handler for allow_sleep_timer
-////////////////////////////////////////////////////////////////////////////////
-void bleremoteapp_allowsleep_timeout( uint32_t arg )
-{
-    WICED_BT_TRACE("\nallow SDS");
-
-    bleRemoteAppState->allowSDS = 1;
-}
-
-////////////////////////////////////////////////////////////////////////////////
 /// This function is the timeout handler for conn_param_update_timer
 ////////////////////////////////////////////////////////////////////////////////
 void bleremoteapp_connparamupdate_timeout( uint32_t arg )
@@ -339,6 +321,15 @@ void bleremoteapp_connparamupdate_timeout( uint32_t arg )
 }
 
 #ifdef SUPPORT_AUDIO
+ #ifndef AUDIO_KEY_PRESS_AND_HOLD
+////////////////////////////////////////////////////////////////////////////////
+/// This function is the timeout handler for mic_open_command_pending_timer
+////////////////////////////////////////////////////////////////////////////////
+void mic_open_command_pending_timeout( uint32_t arg)
+{
+    bleRemoteAppState->audiobutton_pressed = FALSE;
+}
+ #endif
 
 ////////////////////////////////////////////////////////////////////////////////
 /// This function is the timeout handler for mic_stop_command_pending_timer
@@ -347,38 +338,33 @@ void mic_stop_command_pending_timeout( uint32_t arg )
 {
     WICED_BT_TRACE("\nMIC Command Pending Timeout");
     stopMicCommandPending = FALSE;
-#ifdef OTA_FIRMWARE_UPGRADE
+
+ #if ANDROID_AUDIO
+    {
+        uint8_t value;
+        //send out audio end to TV
+        value = ATV_VOICE_SERVICE_AUDIO_STOP;
+        android_voice_send_notification(ble_hidd_link.gatts_conn_id, HANDLE_ATV_VOICE_CTL_CHARACTERISTIC_VALUE, 1, &value, WICED_FALSE);
+
+        //stop audio codec
+        if( audioIsActive() )
+        {
+            wiced_hidd_mic_audio_stop();
+
+            //re-enable app polling
+            wiced_ble_hidd_link_enable_poll_callback(WICED_TRUE);
+
+            WICED_BT_TRACE("\noverflow = %d", wiced_hidd_mic_audio_is_overflow());
+        }
+    }
+ #endif
+
+ #ifdef OTA_FIRMWARE_UPGRADE
     if (!wiced_ota_fw_upgrade_is_active())
-#endif
+ #endif
     {
         wiced_blehidd_allow_slave_latency(TRUE);
     }
-}
-#endif
-
-#if defined(SUPPORT_MOTION)
-////////////////////////////////////////////////////////////////////////////////
-/// Interrupt handler from motion sensor
-/////////////////////////////////////////////////////////////////////////////////
-static void bleremote_motionsensorActivityDetected(void* remApp, uint8_t unsued)
-{
-    // when not connected, use motion to trigger connect
-    // when connected we rely on the regular poll to get data
-    if (!wiced_hidd_link_is_connected())
-    {
-        bleremoteapp_pollReportUserActivity();
-    }
-#ifdef POLL_MOTION_WHILE_CONNECTED_AND_ACTIVE
-    else
-    {
-        // we are connected, use regular poll to retrieve data untill motion
-        // is idle, then we reenable interrupt
-        if (motionsensor)
-        {
-            motionsensor->disableInterrupt();
-        }
-    }
-#endif
 }
 #endif
 
@@ -404,35 +390,6 @@ void bleremoteapp_pre_init(void)
     // reenforce GPIO configuration so we don't lose it after entering uBCS
     wiced_hal_gpio_slimboot_reenforce_cfg(GPIO_RSTN_TP, GPIO_OUTPUT_ENABLE);
 
-#ifdef SUPPORT_MOTION
-    // We put auto detect here in case if the firmware is running on Development board without Motion hardware.
-    // In that case, we don't want to enable MOTION.
-
-    //Check if there is pull-up on I2C SDA.
-    //Put a low on the GPIO
-    wiced_hal_gpio_configure_pin(GPIO_SDA, GPIO_OUTPUT_ENABLE, GPIO_PIN_OUTPUT_LOW);
-
-    //Re-configure the pin as an input and check if SDA will be pulled high
-    wiced_hal_gpio_configure_pin(GPIO_SDA, GPIO_INPUT_ENABLE, GPIO_PIN_OUTPUT_LOW);
-
-    if(wiced_hal_gpio_get_pin_input_status(GPIO_SDA) == 1)
-    {
-        motionsensor = CMotionSensorICM_CMotionSensorICM(
-            bleremote_motionsensorActivityDetected,
-            NULL,
-            GPIO_MOTION_INT,
-            INTR_LVL_HIGH,   // interrupt active high
-            GPIO_EN_INT_RISING_EDGE);
-    }
-    else
-    {
-        //Motion hardware not detected.
-        // Set P5 back to input disabled to avoid current drain issues.
-        wiced_hal_gpio_configure_pin(GPIO_SDA, GPIO_INPUT_DISABLE, GPIO_PIN_OUTPUT_LOW);
-    }
-
-#endif
-
 #ifdef SUPPORT_AUDIO
     audioConfig.mic_codec    = NULL;
     audioConfig.audio_fifo   = audioData;
@@ -442,14 +399,20 @@ void bleremoteapp_pre_init(void)
     audioConfig.audio_gain   = remoteAppConfig.audio_gain;
     audioConfig.audio_boost  = remoteAppConfig.audio_boost;
     audioConfig.audio_delay  = remoteAppConfig.audio_delay;
+ #ifdef ANDROID_AUDIO
+    audioConfig.codec_sampling_freq =  WICED_HIDD_CODEC_SAMP_FREQ_8K;
+ #else
     audioConfig.codec_sampling_freq =  WICED_HIDD_CODEC_SAMP_FREQ_16K;
-
+ #endif
     wiced_hidd_mic_audio_config(&audioConfig);
     wiced_hidd_mic_audio_config_enhanced((uint8_t *)&blehid_audiocfg);
 
     //voice event
     bleRemoteAppState->voiceEvent.eventInfo.eventType = HID_EVENT_VOICE_DATA_AVAILABLE;
 
+ #ifndef AUDIO_KEY_PRESS_AND_HOLD
+    wiced_init_timer( &mic_open_command_pending_timer, mic_open_command_pending_timeout, 0, WICED_MILLI_SECONDS_TIMER );
+ #endif
     wiced_init_timer( &mic_stop_command_pending_timer, mic_stop_command_pending_timeout, 0, WICED_MILLI_SECONDS_TIMER );
 #endif
 
@@ -468,9 +431,6 @@ void bleremoteapp_pre_init(void)
                                         wiced_bt_hid_cfg_settings.ble_scan_cfg.conn_supervision_timeout);
 
     bleremote_setUpAdvData();
-
-    //timer to allow Shut Down Sleep (SDS)
-    wiced_init_timer( &allow_sleep_timer, bleremoteapp_allowsleep_timeout, 0, WICED_MILLI_SECONDS_TIMER );
 
     //timer to request connection param update
     wiced_init_timer( &bleremote_conn_param_update_timer, bleremoteapp_connparamupdate_timeout, 0, WICED_MILLI_SECONDS_TIMER );
@@ -533,16 +493,8 @@ void bleremoteapp_create(void)
 ////////////////////////////////////////////////////////////////////////////////
 void bleremote_2nd_link_up_handler(wiced_bt_gatt_connection_status_t *p_status)
 {
-    //do not allow SDS while switching connections
-    bleRemoteAppState->allowSDS = 0;
-
     //Start 20 second timer to allow time to setup connection encryption
-    //before allowing SDS.
-    if (wiced_is_timer_in_use(&allow_sleep_timer))
-    {
-        wiced_stop_timer(&allow_sleep_timer);
-    }
-    wiced_start_timer(&allow_sleep_timer,20000); //20 seconds. timeout in ms
+    wiced_hidd_deep_sleep_not_allowed(20000);
 }
 #endif
 
@@ -580,21 +532,6 @@ void bleremoteapp_init(void)
     bleremoteapp_stdRptRolloverInit();
     bleremoteapp_ledRptInit();
     bleremoteapp_clearAllReports();
-
-#ifdef SUPPORT_MOTION
-    if (motionsensor)
-    {
-        if (wiced_hal_mia_is_reset_reason_por())
-        {
-            motionsensor->initialize();
-        }
-        else if (motion_mode == SENSOR_ENABLED)
-        {
-            motion_mode = SENSOR_DISABLED;
-            motionsensor->enable(TRUE);
-        }
-    }
-#endif
 
 #ifdef SUPPORT_AUDIO
     wiced_hidd_mic_audio_init(bleremoteapp_appActivityDetected, NULL);
@@ -651,13 +588,6 @@ void bleremoteapp_shutdown(void)
     //stop audio
     wiced_hidd_mic_audio_stop();
 #endif
-#ifdef SUPPORT_MOTION
-    //stop motion sensor
-    if (motionsensor)
-    {
-        motionsensor->shutdown();
-    }
-#endif
 
 #ifdef SUPPORT_TOUCHPAD
     if (touchpad)
@@ -706,13 +636,12 @@ void bleremoteapp_flushUserInput(void)
 /////////////////////////////////////////////////////////////////////////////////
 void bleremoteapp_connectButtonPressed(void)
 {
-#ifdef CONNECTED_ADVERTISING_SUPPORTED
-    blehidlink_allowDiscoverable();
-#else
+#ifndef CONNECTED_ADVERTISING_SUPPORTED
     WICED_BT_TRACE("\nClear CCCD's ");
     bleremoteapp_updateGattMapWithNotifications(0x0000);
     wiced_ble_hidd_link_virtual_cable_unplug();
 #endif
+    blehidlink_allowDiscoverable();
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -1210,11 +1139,9 @@ void bleremoteapp_batRptSend(void)
     //set gatt attribute value here before sending the report
     battery_level = bleRemoteAppState->batRpt.level[0];
 
-    if ( WICED_SUCCESS == wiced_ble_hidd_link_send_report(bleRemoteAppState->batRpt.reportID,WICED_HID_REPORT_TYPE_INPUT,
-                                                          bleRemoteAppState->batRpt.level,bleRemoteAppState->batRptSize))
-    {
-        wiced_hal_batmon_set_battery_report_sent_flag(WICED_TRUE);
-    }
+    wiced_ble_hidd_link_send_report(bleRemoteAppState->batRpt.reportID,WICED_HID_REPORT_TYPE_INPUT,
+                                    bleRemoteAppState->batRpt.level,bleRemoteAppState->batRptSize);
+    wiced_hal_batmon_set_battery_report_sent_flag(WICED_TRUE);
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -1256,9 +1183,6 @@ void bleremoteapp_batLevelChangeNotification(uint32_t newLevel)
     {
         bleRemoteAppState->batRpt.level[0] = newLevel;
         bleremoteapp_batRptSend();
-
-        //we do not want to save battery level value to NVRAM (i.e. SFLASH). too many writes, damage SFLASH lifetime.
-        //blehostlist_SetClientBatLevelAtTop(newLevel);
     }
 }
 
@@ -1279,7 +1203,7 @@ void bleremoteapp_stdRptRolloverSend(void)
     wiced_ble_hidd_link_send_report(bleRemoteAppState->rolloverRpt.reportID,WICED_HID_REPORT_TYPE_INPUT,
             &(bleRemoteAppState->rolloverRpt.modifierKeys),bleRemoteAppState->stdRptSize);
 
-#ifdef SUPPORT_AUDIO
+#ifdef HID_AUDIO
     if(audioIsActive())
     {
         wiced_hidd_voice_control_report_t audioMsgReq;
@@ -1365,6 +1289,64 @@ void bleremoteapp_procErrKeyscan(void)
 }
 
 #ifdef SUPPORT_AUDIO
+ #ifdef ANDROID_AUDIO
+/////////////////////////////////////////////////////////////////////////////////
+/// This function handles the voice CHAR_TX Command from TV.
+/// \param voice control report
+/////////////////////////////////////////////////////////////////////////////////
+void bleremoteapp_handleVoiceTxCommand(uint8_t command)
+{
+    switch( command )
+    {
+        case ATV_VOICE_SERVICE_MIC_OPEN:
+  #ifdef AUDIO_KEY_PRESS_AND_HOLD
+            if (bleRemoteAppState->audiobutton_pressed)
+  #endif
+            {
+                if( !audioIsActive() )
+                {
+                    //queue to event queue, so that the Rpt will be sent after HANDSHAKE message
+                    bleRemoteAppState->voiceCtrlEvent.eventInfo.eventType = HID_EVENT_MIC_START;
+                    wiced_hidd_event_queue_add_event_with_overflow(&bleRemoteAppState->appEventQueue,
+                             &bleRemoteAppState->voiceCtrlEvent.eventInfo,
+                             sizeof(bleRemoteAppState->voiceCtrlEvent),
+                             bleRemoteAppState->pollSeqn);
+                }
+            }
+            break;
+
+        case ATV_VOICE_SERVICE_MIC_CLOSE:
+            //stop timer
+            stopMicCommandPending = FALSE;
+            wiced_stop_timer(&mic_stop_command_pending_timer);
+
+             //stop audio codec
+             if( audioIsActive() )
+             {
+                 wiced_hidd_mic_audio_stop();
+
+                 //re-enable app polling
+                 wiced_ble_hidd_link_enable_poll_callback(WICED_TRUE);
+
+                 WICED_BT_TRACE("\noverflow = %d", wiced_hidd_mic_audio_is_overflow());
+             }
+
+             bleRemoteAppState->audioStopEventInQueue = FALSE;
+             //queue to event queue, so that the Rpt will be sent after HANDSHAKE message
+             bleRemoteAppState->micStopEventInQueue = TRUE;
+             bleRemoteAppState->voiceCtrlEvent.eventInfo.eventType = HID_EVENT_MIC_STOP;
+             wiced_hidd_event_queue_add_event_with_overflow(&bleRemoteAppState->appEventQueue,
+                             &bleRemoteAppState->voiceCtrlEvent.eventInfo,
+                             sizeof(bleRemoteAppState->voiceCtrlEvent),
+                             bleRemoteAppState->pollSeqn);
+            break;
+
+        default:
+            break;
+    }
+}
+
+ #else
 /////////////////////////////////////////////////////////////////////////////////
 /// This function handles the voice control message.
 /// \param voice control report
@@ -1378,13 +1360,6 @@ void bleremoteapp_handleVoiceCtrlMsg(wiced_hidd_voice_control_report_t* voiceCtr
             {
                 if( !audioIsActive() )
                 {
-#ifdef SUPPORT_MOTION
-                    if (motionsensor && motionsensor->isEnabled())
-                    {
-                        //stop motion sensor
-                        motionsensor->enable(FALSE);
-                    }
-#endif
                     //queue to event queue, so that the Rpt will be sent after HANDSHAKE message
                     bleRemoteAppState->voiceCtrlEvent.eventInfo.eventType = HID_EVENT_MIC_START;
                     wiced_hidd_event_queue_add_event_with_overflow(&bleRemoteAppState->appEventQueue,
@@ -1452,6 +1427,7 @@ void bleremoteapp_handleVoiceCtrlMsg(wiced_hidd_voice_control_report_t* voiceCtr
     }
 
 }
+ #endif
 #endif
 /////////////////////////////////////////////////////////////////////////////////
 /// This function implements the rxSetReport function defined by
@@ -1473,7 +1449,7 @@ void bleremoteapp_setReport(wiced_hidd_report_type_t reportType,
 {
     WICED_BT_TRACE("\nbleremoteapp_setReport: %d", payloadSize);
 
-#ifdef SUPPORT_AUDIO
+#ifdef HID_AUDIO
     //we only handle FEATURE report type
     if ((reportType == WICED_HID_REPORT_TYPE_FEATURE) && (reportId == WICED_HIDD_VOICE_CTL_REPORT_ID))
     {
@@ -1966,14 +1942,6 @@ uint8_t bleremoteapp_pollActivityUser(void)
     }
 #endif
 
-#ifdef SUPPORT_MOTION
-    //Poll motion sensor activity
-    if (motionsensor)
-    {
-        status |= bleremoteapp_pollActivitySensor();
-    }
-#endif
-
 #ifdef SUPPORT_AUDIO
     //Poll voice activity
     bleremoteapp_pollActivityVoice();
@@ -1998,34 +1966,39 @@ void bleremoteapp_pollActivityKey(void)
     uint8_t IR_code = 0x3D;
 #endif
 
+#if defined(ANDROID_AUDIO)
+    uint8_t audio_key_pressed = 0;
+#endif
+
     // Assume that end-of-cycle event suppression is on
     suppressEndScanCycleAfterConnectButton = TRUE;
 
     // Process all key events from the keyscan driver
     while (wiced_hal_keyscan_get_next_event(&bleRemoteAppState->kbKeyEvent.keyEvent))
     {
-        //WICED_BT_TRACE("\nkeyCode=0x%x, upDown=%d", bleRemoteAppState->kbKeyEvent.keyEvent.keyCode, bleRemoteAppState->kbKeyEvent.keyEvent.upDownFlag);
+        uint8_t kc = bleRemoteAppState->kbKeyEvent.keyEvent.keyCode;
+        wiced_bool_t down = bleRemoteAppState->kbKeyEvent.keyEvent.upDownFlag == KEY_DOWN;
+
 #ifdef CONNECTED_ADVERTISING_SUPPORTED
         // while in CONNECTED - advertising state, any key press shall terminate terminate advertising and go back to CONNECTED state
         if (ble_hidd_link.second_conn_state && wiced_hidd_link_is_connected() &&
-            (bleRemoteAppState->kbKeyEvent.keyEvent.keyCode != END_OF_SCAN_CYCLE) && (bleRemoteAppState->kbKeyEvent.keyEvent.upDownFlag == KEY_DOWN))
+            (kc != END_OF_SCAN_CYCLE) && down)
         {
             wiced_bt_start_advertisements(BTM_BLE_ADVERT_OFF, 0, NULL);
         }
 #endif
         // Check for connect button
-        if (bleRemoteAppState->kbKeyEvent.keyEvent.keyCode == kbAppConfig.connectButtonScanIndex)
+        if (kc == kbAppConfig.connectButtonScanIndex)
         {
             // Pass current connect button state to connect button handler
-            bleremoteapp_connectButtonHandler(
-                    ((bleRemoteAppState->kbKeyEvent.keyEvent.upDownFlag == KEY_DOWN)?
-                     CONNECT_BUTTON_DOWN:CONNECT_BUTTON_UP));
+            bleremoteapp_connectButtonHandler(down?CONNECT_BUTTON_DOWN:CONNECT_BUTTON_UP);
         }
 #ifdef SUPPORT_IR
         //IR button
-        else if (ir && (bleRemoteAppState->kbKeyEvent.keyEvent.keyCode == remoteAppConfig.IR_ButtonScanIndex))
+        else if (ir && (kc == remoteAppConfig.IR_ButtonScanIndex))
         {
-            if (bleRemoteAppState->kbKeyEvent.keyEvent.upDownFlag == KEY_DOWN)
+            WICED_BT_TRACE("\nIR Btn %s", down? "Down" : "Up");
+            if (down)
             {
                 if( wiced_is_timer_in_use(&allow_irtx_timer))
                 {
@@ -2048,108 +2021,74 @@ void bleremoteapp_pollActivityKey(void)
             }
         }
 #endif
-#ifdef SUPPORT_MOTION
-        //motion START button
-        else if (motionsensor && (bleRemoteAppState->kbKeyEvent.keyEvent.keyCode == remoteAppConfig.MotionStart_ButtonScanIndex))
+        else
         {
-            if (!motionsensor->isEnabled() //motion is not enabled
-                && !audioIsActive()) // audio is not active
-            {
-                //start motion sensor
-                motionsensor->enable(TRUE);
-                wiced_blehidd_allow_slave_latency(FALSE);
-            }
-        }
-        //motion STOP button
-        else if (motionsensor && (bleRemoteAppState->kbKeyEvent.keyEvent.keyCode == remoteAppConfig.MotionStop_ButtonScanIndex))
-        {
-            if (!audioIsActive()) //audio is not active
-            {
-                if (motionsensor->isEnabled())
-                {
-                    //stop motion sensor
-                    motionsensor->enable(FALSE);
-#ifdef OTA_FIRMWARE_UPGRADE
-                    if (!wiced_ota_fw_upgrade_is_active())
-#endif
-                    {
-                        wiced_blehidd_allow_slave_latency(TRUE);
-                    }
-                }
-                //NOTE: if disconnected, any key press except connectbutton should trigger a reconnect attempt.
-                if (!wiced_hidd_link_is_connected())
-                {
-                    wiced_hidd_event_queue_add_event_with_overflow(&bleRemoteAppState->appEventQueue,
-                                &bleRemoteAppState->eventNULL.eventInfo,
-                                sizeof(bleRemoteAppState->eventNULL),
-                                bleRemoteAppState->pollSeqn);
-                }
-            }
-        }
-#endif
 #ifdef SUPPORT_AUDIO
-        //audio button
-        else if (bleRemoteAppState->kbKeyEvent.keyEvent.keyCode == remoteAppConfig.Voice_ButtonScanIndex)
-        {
-            if (remoteAppConfig.audio_mode == WICED_HIDD_AUDIO_BUTTON_SEND_MSG)
+            //audio button
+            if (kc == remoteAppConfig.Voice_ButtonScanIndex)
             {
-                if (!bleRemoteAppState->recoveryInProgress && (bleRemoteAppState->kbKeyEvent.keyEvent.upDownFlag == KEY_DOWN))
+ #ifdef ANDROID_AUDIO
+                if (!bleRemoteAppState->recoveryInProgress && down)
                 {
                     bleRemoteAppState->audiobutton_pressed = TRUE;
-#ifdef SUPPORT_MOTION
-                    //stop motion sensor while play audio
-                    if (motionsensor && motionsensor->isEnabled())
-                    {
-                        motionsensor->enable(FALSE);
-                    }
-#endif
                     bleRemoteAppState->voiceCtrlEvent.eventInfo.eventType = HID_EVENT_RC_MIC_START_REQ;
+                    audio_key_pressed = 1;
                 }
+  #ifdef AUDIO_KEY_PRESS_AND_HOLD
                 else
                 {
                     bleRemoteAppState->audiobutton_pressed = FALSE;
                     bleRemoteAppState->audioStopEventInQueue = TRUE;
                     bleRemoteAppState->voiceCtrlEvent.eventInfo.eventType = HID_EVENT_RC_MIC_STOP_REQ;
+                    audio_key_pressed = 1;
                 }
-                wiced_hidd_event_queue_add_event_with_overflow(&bleRemoteAppState->appEventQueue,
-                            &bleRemoteAppState->voiceCtrlEvent.eventInfo,
-                            sizeof(bleRemoteAppState->voiceCtrlEvent),
-                            bleRemoteAppState->pollSeqn);
-            }
-            else if (remoteAppConfig.audio_mode == WICED_HIDD_AUDIO_BUTTON_SEND_PCM)
-            {
-                uint8_t cond_startAudio = (bleRemoteAppState->kbKeyEvent.keyEvent.upDownFlag == KEY_DOWN)  && !audioIsActive() ;
-                uint8_t cond_stopAudio  = !(bleRemoteAppState->kbKeyEvent.keyEvent.upDownFlag == KEY_DOWN) && audioIsActive() ;
-
-                if (cond_startAudio && !bleRemoteAppState->recoveryInProgress)
+  #endif
+            } // ANDROID_AUDIO enqueue normal key event & audio event after END_OF_SCAN_CYCLE
+ #else // HID_AUDIO
+                if (remoteAppConfig.audio_mode == WICED_HIDD_AUDIO_BUTTON_SEND_MSG)
                 {
-#ifdef SUPPORT_MOTION
-                    //stop motion sensor while play audio
-                    if ( motionIsEnabled() )
+                    if (!bleRemoteAppState->recoveryInProgress && down)
                     {
-                        motionsensor->enable(FALSE);
+                        bleRemoteAppState->audiobutton_pressed = TRUE;
+                        bleRemoteAppState->voiceCtrlEvent.eventInfo.eventType = HID_EVENT_RC_MIC_START_REQ;
                     }
-#endif
-                    // audio is inactive, activate
-                    wiced_hidd_mic_audio_set_active(WICED_TRUE);
+                    else
+                    {
+                        bleRemoteAppState->audiobutton_pressed = FALSE;
+                        bleRemoteAppState->audioStopEventInQueue = TRUE;
+                        bleRemoteAppState->voiceCtrlEvent.eventInfo.eventType = HID_EVENT_RC_MIC_STOP_REQ;
+                    }
+                    wiced_hidd_event_queue_add_event_with_overflow(&bleRemoteAppState->appEventQueue,
+                                &bleRemoteAppState->voiceCtrlEvent.eventInfo,
+                                sizeof(bleRemoteAppState->voiceCtrlEvent),
+                                bleRemoteAppState->pollSeqn);
                 }
-                else if (cond_stopAudio)
+                else if (remoteAppConfig.audio_mode == WICED_HIDD_AUDIO_BUTTON_SEND_PCM)
                 {
-                    // audio is active, stop audio
-                    wiced_hidd_mic_audio_stop();
+                    uint8_t cond_startAudio = (bleRemoteAppState->kbKeyEvent.keyEvent.upDownFlag == KEY_DOWN)  && !audioIsActive() ;
+                    uint8_t cond_stopAudio  = !(bleRemoteAppState->kbKeyEvent.keyEvent.upDownFlag == KEY_DOWN) && audioIsActive() ;
 
-                    //re-enable app polling
-                    wiced_ble_hidd_link_enable_poll_callback(WICED_TRUE);
+                    if (cond_startAudio && !bleRemoteAppState->recoveryInProgress)
+                    {
+                        // audio is inactive, activate
+                        wiced_hidd_mic_audio_set_active(WICED_TRUE);
+                    }
+                    else if (cond_stopAudio)
+                    {
+                        // audio is active, stop audio
+                        wiced_hidd_mic_audio_stop();
 
-                    WICED_BT_TRACE("\noverflow = %d", wiced_hidd_mic_audio_is_overflow());
+                        //re-enable app polling
+                        wiced_ble_hidd_link_enable_poll_callback(WICED_TRUE);
+
+                        WICED_BT_TRACE("\noverflow = %d", wiced_hidd_mic_audio_is_overflow());
+                    }
                 }
-            }
-        }
+            } else // HID_AUDIO does not enqueue key event, but only audio event
+ #endif //!ANDROID_AUDIO
 #endif
-        else
-        {
             // Check if this is an end-of-scan cycle event
-            if (bleRemoteAppState->kbKeyEvent.keyEvent.keyCode == END_OF_SCAN_CYCLE)
+            if (kc == END_OF_SCAN_CYCLE)
             {
                 // Yes. Queue it if it need not be suppressed
                 if (!suppressEndScanCycleAfterConnectButton)
@@ -2159,8 +2098,18 @@ void bleremoteapp_pollActivityKey(void)
 
                 // Enable end-of-scan cycle suppression since this is the start of a new cycle
                 suppressEndScanCycleAfterConnectButton = TRUE;
+#ifdef ANDROID_AUDIO
+                if (audio_key_pressed)
+                {
+                    WICED_BT_TRACE("\nAudio event %d", bleRemoteAppState->voiceCtrlEvent.eventInfo.eventType);
+                    wiced_hidd_event_queue_add_event_with_overflow(&bleRemoteAppState->appEventQueue,
+                                    &bleRemoteAppState->voiceCtrlEvent.eventInfo,
+                                    sizeof(bleRemoteAppState->voiceCtrlEvent),
+                                    bleRemoteAppState->pollSeqn);
+                }
+#endif
             }
-            else
+            else if (kc != ROLLOVER)
             {
 #ifdef SUPPORT_TOUCHPAD
                 HidEventKey * ke = &(bleRemoteAppState->kbKeyEvent);
@@ -2173,63 +2122,23 @@ void bleremoteapp_pollActivityKey(void)
                 }
 
                 if (sendKey)
-                {
 #endif
+                {
+//                    if (kc != remoteAppConfig.Voice_ButtonScanIndex)
+                    {
+                        WICED_BT_TRACE("\nkc:%d %s",bleRemoteAppState->kbKeyEvent.keyEvent.keyCode, down ? "Down" : "Up");
+                    }
                     // No. Queue the key event
                     wiced_hidd_event_queue_add_event_with_overflow(&bleRemoteAppState->appEventQueue, &bleRemoteAppState->kbKeyEvent.eventInfo,
                             sizeof(bleRemoteAppState->kbKeyEvent), bleRemoteAppState->pollSeqn);
                     // Disable end-of-scan cycle suppression
                     suppressEndScanCycleAfterConnectButton = FALSE;
-#ifdef SUPPORT_TOUCHPAD
                 }
-#endif
             }
         }
     }
 }
 
-
-/////////////////////////////////////////////////////////////////////////////////
-/// This function polls for motion sensor activity and queues any events in the
-/// FW event queue.
-/////////////////////////////////////////////////////////////////////////////////
-uint8_t bleremoteapp_pollActivitySensor(void)
-{
-#ifdef SUPPORT_MOTION
-    HidEventUserDefine event;
-    if (MOTION_EVENT_AVAILABLE == motionsensor->pollActivity(&event))
-    {
-        wiced_hidd_event_queue_add_event_with_overflow(&bleRemoteAppState->appEventQueue,
-                     (HidEvent *)&event,
-                     sizeof(HidEventUserDefine),
-                     bleRemoteAppState->pollSeqn);
-        return BLEHIDLINK_ACTIVITY_REPORTABLE;
-    }
-#endif
-    return BLEHIDLINK_ACTIVITY_NONE;
-}
-
-
-#ifdef SUPPORT_MOTION
-/////////////////////////////////////////////////////////////////////////////////
-/// This function retrieves the motion event, generates reports as
-/// necessary
-/////////////////////////////////////////////////////////////////////////////////
-void bleremoteapp_procEvtMotion(void)
-{
-    HidEventUserDefine *pEvt;
-    while (((pEvt = (HidEventUserDefine *)wiced_hidd_event_queue_get_current_element(&bleRemoteAppState->appEventQueue)) != NULL) &&
-           (pEvt->eventInfo.eventType == HID_EVENT_MOTION_DATA_AVAILABLE))
-    {
-        memcpy(bleremote_motion_rpt, pEvt->userDataPtr, MOTIONRPT_MAX_DATA);
-
-        wiced_ble_hidd_link_send_report(MOTION_REPORT_ID, WICED_HID_REPORT_TYPE_INPUT, bleremote_motion_rpt, MOTIONRPT_MAX_DATA);
-
-        // We are done with this event. Delete it
-        wiced_hidd_event_queue_remove_current_element(&bleRemoteAppState->appEventQueue);
-    }
-}
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Process a user defined event. By default the keyboard application
@@ -2242,15 +2151,20 @@ void bleremoteapp_procEvtMotion(void)
 void bleremoteapp_procEvtUserDefined(void)
 {
     HidEvent *curEvent = (HidEvent *)wiced_hidd_event_queue_get_current_element(&bleRemoteAppState->appEventQueue);
+#ifdef ANDROID_AUDIO
+    //send out  audio start to TV
+    uint8_t value = ATV_VOICE_SERVICE_AUDIO_START;
+#endif
+
+    if (!curEvent)
+    {
+        return;
+    }
 
     switch (curEvent->eventType)
     {
-#ifdef SUPPORT_MOTION
-        case HID_EVENT_MOTION_DATA_AVAILABLE:
-            bleremoteapp_procEvtMotion();
-            break;
-#endif
 #ifdef SUPPORT_AUDIO
+ #ifdef HID_AUDIO
         case HID_EVENT_RC_MIC_START_REQ:
             wiced_blehidd_allow_slave_latency(FALSE);
             bleremoteapp_procEvtVoiceCtrl(curEvent->eventType);
@@ -2272,12 +2186,16 @@ void bleremoteapp_procEvtUserDefined(void)
                 WICED_BT_TRACE("\noverflow = %d", wiced_hidd_mic_audio_is_overflow());
             }
             break;
-
+ #endif
         case HID_EVENT_VOICE_DATA_AVAILABLE: //audio data
             bleremoteApp_procEvtVoice();
             break;
 
         case HID_EVENT_MIC_START: //start audio
+            WICED_BT_TRACE("\nHID_EVENT_MIC_START");
+ #ifdef ANDROID_AUDIO
+            wiced_blehidd_allow_slave_latency(FALSE);
+ #endif
             // Delete it
             while (HID_EVENT_MIC_START == curEvent->eventType)
             {
@@ -2285,6 +2203,15 @@ void bleremoteapp_procEvtUserDefined(void)
                 curEvent = (HidEvent *)wiced_hidd_event_queue_get_current_element(&bleRemoteAppState->appEventQueue);
             }
 
+ #ifdef ANDROID_AUDIO
+            //send out  audio start to TV
+            value = ATV_VOICE_SERVICE_AUDIO_START;
+            android_voice_send_notification(ble_hidd_link.gatts_conn_id, HANDLE_ATV_VOICE_CTL_CHARACTERISTIC_VALUE, 1, &value, WICED_FALSE);
+
+            //start timer
+            stopMicCommandPending = TRUE;
+            wiced_start_timer(&mic_stop_command_pending_timer,7000); // 7 seconds timeout in ms
+ #endif
             //start audio codec
             if( !audioIsActive() )
             {
@@ -2297,6 +2224,7 @@ void bleremoteapp_procEvtUserDefined(void)
             break;
 
         case HID_EVENT_MIC_STOP: //stop audio
+            WICED_BT_TRACE("\nHID_EVENT_MIC_STOP");
             // Delete it
             while (HID_EVENT_MIC_STOP == curEvent->eventType)
             {
@@ -2305,13 +2233,27 @@ void bleremoteapp_procEvtUserDefined(void)
                 curEvent = (HidEvent *)wiced_hidd_event_queue_get_current_element(&bleRemoteAppState->appEventQueue);
             }
 
+ #ifdef ANDROID_AUDIO
+            //send out  audio end to TV
+            value = ATV_VOICE_SERVICE_AUDIO_STOP;
+            android_voice_send_notification(ble_hidd_link.gatts_conn_id, HANDLE_ATV_VOICE_CTL_CHARACTERISTIC_VALUE, 1, &value, WICED_FALSE);
+
+  #ifndef AUDIO_KEY_PRESS_AND_HOLD
+            //start mic_open timer (7 seconds)
+            if (wiced_is_timer_in_use(&mic_open_command_pending_timer))
+            {
+                wiced_stop_timer(&mic_open_command_pending_timer);
+            }
+            wiced_start_timer(&mic_open_command_pending_timer,7000); // 7 seconds timeout in ms
+  #endif
+ #else
             stopMicCommandPending = FALSE;
             if (wiced_is_timer_in_use(&mic_stop_command_pending_timer))
             {
                 wiced_stop_timer(&mic_stop_command_pending_timer);
-#ifdef OTA_FIRMWARE_UPGRADE
+  #ifdef OTA_FIRMWARE_UPGRADE
                 if (!wiced_ota_fw_upgrade_is_active())
-#endif
+  #endif
                 {
                     wiced_blehidd_allow_slave_latency(TRUE);
                 }
@@ -2327,9 +2269,42 @@ void bleremoteapp_procEvtUserDefined(void)
 
                 WICED_BT_TRACE("\noverflow = %d", wiced_hidd_mic_audio_is_overflow());
             }
-
+ #endif
             break;
 
+ #ifdef ANDROID_AUDIO
+  #ifdef AUDIO_KEY_PRESS_AND_HOLD
+        case HID_EVENT_RC_MIC_STOP_REQ:
+            WICED_BT_TRACE("\nHID_EVENT_RC_MIC_STOP_REQ");
+            // Delete it
+            while (HID_EVENT_RC_MIC_STOP_REQ == curEvent->eventType)
+            {
+                wiced_hidd_event_queue_remove_current_element(&bleRemoteAppState->appEventQueue);
+                bleRemoteAppState->micStopEventInQueue = FALSE;
+                curEvent = (HidEvent *)wiced_hidd_event_queue_get_current_element(&bleRemoteAppState->appEventQueue);
+            }
+            stopMicCommandPending = FALSE;
+            wiced_stop_timer(&mic_stop_command_pending_timer);
+
+            //stop audio codec
+            if( audioIsActive() )
+            {
+                wiced_hidd_mic_audio_stop();
+
+                //re-enable app polling
+                wiced_ble_hidd_link_enable_poll_callback(WICED_TRUE);
+
+                WICED_BT_TRACE("\noverflow = %d", wiced_hidd_mic_audio_is_overflow());
+            }
+
+            //send out  audio end to TV
+            value = ATV_VOICE_SERVICE_AUDIO_STOP;
+            android_voice_send_notification(ble_hidd_link.gatts_conn_id, HANDLE_ATV_VOICE_CTL_CHARACTERISTIC_VALUE, 1, &value, WICED_FALSE);
+            break;
+  #endif // AUDIO_KEY_PRESS_AND_HOLD
+ #endif // ANDROID_AUDIO
+
+ #ifdef HID_AUDIO
         case HID_EVENT_AUDIO_MODE:
             // Delete it
             wiced_hidd_event_queue_remove_current_element(&bleRemoteAppState->appEventQueue);
@@ -2352,7 +2327,9 @@ void bleremoteapp_procEvtUserDefined(void)
             //send Rpt
             bleremoteapp_voiceWriteCodecSetting();
             break;
-#endif
+ #endif // HID_AUDIO
+#endif // SUPPORT_AUDIO
+
 #ifdef SUPPORT_TOUCHPAD
         case HID_EVENT_TP_FINGER_STATUS_CHANGE:
             // do nothing for now, FALL THROUGH
@@ -2407,7 +2384,47 @@ void bleremoteapp_pollActivityVoice(void)
     }
 }
 
+/////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
+void send_audio_data(uint8_t * ptr, uint16_t len)
+{
+    memcpy(bleremote_voice_rpt, ptr, len);
+#ifdef ANDROID_AUDIO
+    android_voice_send_notification(ble_hidd_link.gatts_conn_id, HANDLE_ATV_VOICE_RX_CHARACTERISTIC_VALUE, len, bleremote_voice_rpt, WICED_FALSE);
+#else
+    wiced_ble_hidd_link_send_report(RPT_ID_VOICE_DATA, WICED_HID_REPORT_TYPE_INPUT, bleremote_voice_rpt, len);
+#endif
+}
 
+/////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
+void bleremoteApp_procEvtVoice(void)
+{
+    uint8_t audio_outData[WICED_HIDD_MIC_AUDIO_BUFFER_SIZE*2+1];
+    uint8_t * dataPtr = audio_outData;
+    HidEventUserDefine *voice_event = (HidEventUserDefine *)wiced_hidd_event_queue_get_current_element(&bleRemoteAppState->appEventQueue);
+    wiced_hidd_voice_report_t *audioPtr = (wiced_hidd_voice_report_t *)voice_event->userDataPtr;
+    uint16_t len = wiced_hidd_mic_audio_get_audio_out_data(audioPtr, dataPtr);
+
+    // as long as the size is larger than MTU size, we fragement the data
+    while (len >= AUDIO_MTU_SIZE)
+    {
+        send_audio_data(dataPtr, AUDIO_MTU_SIZE);
+        dataPtr += AUDIO_MTU_SIZE;
+        len -= AUDIO_MTU_SIZE;
+    }
+    // if any remainding residual data, finish it up
+    if (len)
+    {
+        send_audio_data(dataPtr, len);
+    }
+
+    // We are done with this event. Delete it
+    wiced_hidd_event_queue_remove_current_element(&bleRemoteAppState->appEventQueue);
+    bleRemoteAppState->audioPacketInQueue--;
+}
+
+ #ifdef HID_AUDIO
 /////////////////////////////////////////////////////////////////////////////////
 /// This function retrieves the voice control event, generates reports as
 /// necessary
@@ -2438,63 +2455,6 @@ void bleremoteapp_procEvtVoiceCtrl(uint8_t eventType)
 }
 
 /////////////////////////////////////////////////////////////////////////////////
-/// This function retrieves the motion event, generates reports as
-/// necessary
-/////////////////////////////////////////////////////////////////////////////////
-void bleremoteApp_procEvtVoice(void)
-{
-    uint16_t len;
-    uint8_t i;
-    uint8_t audio_outData[WICED_HIDD_MIC_AUDIO_BUFFER_SIZE*2+1];
-    HidEventUserDefine *voice_event = (HidEventUserDefine *)wiced_hidd_event_queue_get_current_element(&bleRemoteAppState->appEventQueue);
-    wiced_hidd_voice_report_t *audioPtr = (wiced_hidd_voice_report_t *)voice_event->userDataPtr;
-
-    len = wiced_hidd_mic_audio_get_audio_out_data(audioPtr, audio_outData);
-
-    if (len > 0)
-    {
- #ifdef ATT_MTU_SIZE_180
-        //send audio out as one GATT MTU.
-        memcpy(bleremote_voice_rpt, audio_outData, len);
-        wiced_ble_hidd_link_send_report(audioPtr->reportId,WICED_HID_REPORT_TYPE_INPUT, bleremote_voice_rpt, len);
- #else
-  #ifdef SBC_ENCODER
-        //60 bytes data splits into 3 parts and sends out
-        for(i=0; i<3; i++)
-        {
-            memcpy(bleremote_voice_rpt, &audio_outData[20*i], 20);
-            wiced_ble_hidd_link_send_report(audioPtr->reportId,WICED_HID_REPORT_TYPE_INPUT, bleremote_voice_rpt, 20);
-        }
-  #endif
-  #ifdef CELT_ENCODER
-        //89 bytes data splits into 5 parts and sends out
-        for(i=0; i<4; i++)
-        {
-            memcpy(bleremote_voice_rpt, &audio_outData[20*i], 20);
-            wiced_ble_hidd_link_send_report(audioPtr->reportId,WICED_HID_REPORT_TYPE_INPUT, bleremote_voice_rpt, 20);
-        }
-        memcpy(bleremote_voice_rpt, &audio_outData[80], 9);
-        wiced_ble_hidd_link_send_report(audioPtr->reportId,WICED_HID_REPORT_TYPE_INPUT, bleremote_voice_rpt, 9);
-  #endif
-  #ifdef ADPCM_ENCODER
-        //134 bytes data split into 7 parts and sends out
-        for (i=0; i<6; i++)
-        {
-            memcpy(bleremote_voice_rpt, &audio_outData[20*i], 20);
-            wiced_ble_hidd_link_send_report(audioPtr->reportId,WICED_HID_REPORT_TYPE_INPUT, bleremote_voice_rpt, 20);
-        }
-        memcpy(bleremote_voice_rpt, &audio_outData[120], 14);
-        wiced_ble_hidd_link_send_report(audioPtr->reportId,WICED_HID_REPORT_TYPE_INPUT, bleremote_voice_rpt, 14);
-  #endif
- #endif
-    }
-
-    // We are done with this event. Delete it
-    wiced_hidd_event_queue_remove_current_element(&bleRemoteAppState->appEventQueue);
-    bleRemoteAppState->audioPacketInQueue--;
-}
-
-/////////////////////////////////////////////////////////////////////////////////
 /// This function transmits the voice control report(WICED_HIDD_RC_VOICEMODE_RD_ACK)
 /////////////////////////////////////////////////////////////////////////////////
 void bleremoteapp_voiceModeSend(void)
@@ -2510,7 +2470,6 @@ void bleremoteapp_voiceModeSend(void)
     wiced_ble_hidd_link_send_report(WICED_HIDD_VOICE_CTL_REPORT_ID,WICED_HID_REPORT_TYPE_INPUT,&audiomodeRsp.format,
                 sizeof(wiced_hidd_voice_control_report_t) - sizeof(audiomodeRsp.reportId));
 }
-
 
 /////////////////////////////////////////////////////////////////////////////////
 /// This function transmits the voice control report(WICED_HIDD_RC_CODECSETTINGS_RD_ACK)
@@ -2560,7 +2519,8 @@ void bleremoteapp_voiceWriteCodecSetting(void)
         }
     }
 }
-#endif
+ #endif // HID_AUDIO
+#endif // SUPPORT_AUDIO
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Generic interrupt handler, audio
@@ -2580,16 +2540,18 @@ void bleremoteapp_appActivityDetected(void *remApp)
 /////////////////////////////////////////////////////////////////////////////////
 void bleremoteapp_transportStateChangeNotification(uint32_t newState)
 {
+    static uint8_t blinkingStartup = 1;
     int16_t flags;
-    WICED_BT_TRACE("\nTransport state changed to %d", newState);
+    WICED_BT_TRACE("\nTransport state changed to ");
 
-    bleRemoteAppState->allowSDS = 0;
-
-    //stop allow Shut Down Sleep (SDS) timer
-    wiced_stop_timer(&allow_sleep_timer);
+    wiced_hidd_set_deep_sleep_allowed(WICED_FALSE);
 
     if(newState == BLEHIDLINK_CONNECTED)
     {
+        WICED_BT_TRACE("connected");
+        wiced_hidd_led_blink_stop();
+        wiced_hidd_led_on(LED_LE_LINK);
+
         //get host client configuration characteristic descriptor values
         flags = wiced_hidd_host_get_flags(ble_hidd_link.gatts_peer_addr, ble_hidd_link.gatts_peer_addr_type);
         if(flags != -1)
@@ -2612,14 +2574,6 @@ void bleremoteapp_transportStateChangeNotification(uint32_t newState)
         }
 #endif
 
-#if defined(SUPPORT_MOTION)
-        if (motionsensor && motionsensor->isEnabled())
-        {
-            // if connected and motion is enabled, prepare to send motion data
-            wiced_blehidd_allow_slave_latency(FALSE);
-        }
-#endif
-
         wiced_ble_hidd_link_enable_poll_callback(WICED_TRUE);
 
         if(firstTransportStateChangeNotification)
@@ -2627,14 +2581,14 @@ void bleremoteapp_transportStateChangeNotification(uint32_t newState)
             //Wake up from HID Off and already have a connection then allow HID Off in 1 second
             //This will allow time to send a key press.
             //To do need to check if key event is in the queue at lpm query
-            wiced_start_timer(&allow_sleep_timer,1000); // 1 second. timeout in ms
+            wiced_hidd_deep_sleep_not_allowed(1000); // 1 second. timeout in ms
         }
         else
         {
             //We connected after power on reset or HID off recovery.
             //Start 20 second timer to allow time to setup connection encryption
             //before allowing HID Off/Micro-BCS.
-            wiced_start_timer(&allow_sleep_timer,20000); //20 seconds. timeout in ms
+            wiced_hidd_deep_sleep_not_allowed(20000); //20 seconds. timeout in ms
 
             //start 15 second timer to make sure connection param update is requested before SDS
             wiced_start_timer(&bleremote_conn_param_update_timer,15000); //15 seconds. timeout in ms
@@ -2643,9 +2597,20 @@ void bleremoteapp_transportStateChangeNotification(uint32_t newState)
     }
     else if (newState == BLEHIDLINK_DISCONNECTED)
     {
+        WICED_BT_TRACE("disconnected");
+        if (!blinkingStartup)
+        {
+            wiced_hidd_led_blink_stop();
+            wiced_hidd_led_off(LED_LE_LINK);
+        }
+        else
+        {
+            blinkingStartup = 0;
+        }
+
         //allow Shut Down Sleep (SDS) only if we are not attempting reconnect
         if (!wiced_is_timer_in_use(&ble_hidd_link.reconnect_timer))
-            wiced_start_timer(&allow_sleep_timer, 2000); // 2 seconds. timeout in ms
+            wiced_hidd_deep_sleep_not_allowed(2000); // 2 seconds. timeout in ms
 
         // disable Ghost detection
         wiced_hal_keyscan_enable_ghost_detection(FALSE);
@@ -2654,48 +2619,32 @@ void bleremoteapp_transportStateChangeNotification(uint32_t newState)
         //stop audio
         wiced_hidd_mic_audio_stop();
 #endif
-#ifdef SUPPORT_MOTION
-        if (motionsensor)
-        {
-            if (wiced_hidd_is_paired())
-            {
-                // if it's bonded we want motion sensor to wake us up to try reconnect
-                motionsensor->enableInterrupt();
-            }
-            else
-            {
-                //stop motion sensor
-                if (motionsensor->isEnabled())
-                {
-                    motionsensor->enable(FALSE);
-#ifdef OTA_FIRMWARE_UPGRADE
-                    if (!wiced_ota_fw_upgrade_is_active())
-#endif
-                    {
-                        wiced_blehidd_allow_slave_latency(TRUE);
-                    }
-                }
-            }
-        }
-#endif
 
         // Tell the transport to stop polling
         wiced_ble_hidd_link_enable_poll_callback(WICED_FALSE);
     }
-#ifdef SUPPORT_TOUCHPAD
     else if (newState == BLEHIDLINK_DISCOVERABLE)
     {
+        WICED_BT_TRACE("discoverable");
+        wiced_hidd_led_blink(LED_LE_LINK, 0, 500);     // blink LINK line to indicate pairing
+#ifdef SUPPORT_TOUCHPAD
         if (touchpad)
         {
             touchpad->clearEvent();
         }
-    }
 #endif
+    }
+    else if (newState == BLEHIDLINK_RECONNECTING)
+    {
+        WICED_BT_TRACE("\nReconnecting");
+        wiced_hidd_led_blink(LED_LE_LINK, 0, 200);     // faster blink LINK line to indicate reconnecting
+    }
+#if 0
     else if ((newState == BLEHIDLINK_ADVERTISING_IN_uBCS_DIRECTED) || (newState == BLEHIDLINK_ADVERTISING_IN_uBCS_UNDIRECTED))
     {
         bleRemoteAppState->allowSDS = 1;
     }
-
+#endif
     if(firstTransportStateChangeNotification)
         firstTransportStateChangeNotification = 0;
 
@@ -2762,21 +2711,6 @@ void bleremoteapp_clientConfWriteBatteryRpt(wiced_hidd_report_type_t reportType,
     bleremoteapp_updateClientConfFlags(notification, KBAPP_CLIENT_CONFIG_NOTIF_BATTERY_RPT);
 }
 
-
-////////////////////////////////////////////////////////////////////////////////
-/// Client characteritics conf write handler for motion report
-////////////////////////////////////////////////////////////////////////////////
-void bleremoteapp_clientConfWriteRptMotion(wiced_hidd_report_type_t reportType,
-                                 uint8_t reportId,
-                                 void *payload,
-                                 uint16_t payloadSize)
-{
-    uint8_t  notification = *(uint16_t *)payload & GATT_CLIENT_CONFIG_NOTIFICATION;
-    //uint8_t indication = *(uint16_t *)payload & GATT_CLIENT_CONFIG_INDICATION;
-
-    bleremoteapp_updateClientConfFlags(notification, KBAPP_CLIENT_CONFIG_NOTIF_MOTION_RPT);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 /// Client characteritics conf write handler for user defined key report
 ////////////////////////////////////////////////////////////////////////////////
@@ -2791,7 +2725,7 @@ void bleremoteapp_clientConfWriteRptUserDefinedKey(wiced_hidd_report_type_t repo
     bleremoteapp_updateClientConfFlags(notification, KBAPP_CLIENT_CONFIG_NOTIF_USER_DEFINED_KEY_RPT);
 }
 
-#ifdef SUPPORT_AUDIO
+#ifdef HID_AUDIO
 ////////////////////////////////////////////////////////////////////////////////
 /// Client characteristics conf write handler for audio report
 ////////////////////////////////////////////////////////////////////////////////
@@ -2894,6 +2828,9 @@ uint32_t bleremoteapp_sleep_handler(wiced_sleep_poll_type_t type )
  #endif
  #ifdef SUPPORT_AUDIO
                 && !audioIsActive()
+  #ifndef AUDIO_KEY_PRESS_AND_HOLD
+                && !bleRemoteAppState->audiobutton_pressed
+  #endif
  #endif
  #if defined(SUPPORT_TOUCHPAD) && defined(HANDLE_STUCK_FINGER)
                 && !touchpadIsActive()
@@ -2923,8 +2860,11 @@ uint32_t bleremoteapp_sleep_handler(wiced_sleep_poll_type_t type )
   #ifdef SUPPORT_TOUCHPAD
                 || touchpadIsActive()
   #endif
-  #if defined(SUPPORT_MOTION)
-                || motionIsActive()
+  #ifdef SUPPORT_AUDIO
+                || audioIsActive()
+   #ifndef AUDIO_KEY_PRESS_AND_HOLD
+                || bleRemoteAppState->audiobutton_pressed
+   #endif
   #endif
                )
  #endif
@@ -2942,13 +2882,7 @@ uint32_t bleremoteapp_sleep_handler(wiced_sleep_poll_type_t type )
 void bleremoteapp_aon_restore(void)
 {
     //cold boot
-    if (wiced_hal_mia_is_reset_reason_por())
-    {
-#ifdef SUPPORT_MOTION
-        motion_mode = SENSOR_DISABLED;
-#endif
-    }
-    else //wake from SDS
+    if (!wiced_hal_mia_is_reset_reason_por())
     {
         wiced_ble_hidd_link_aon_action_handler(BLEHIDLINK_RESTORE_FROM_AON);
     }
@@ -2973,7 +2907,7 @@ void bleremoteapp_findme_init(void)
 //        wiced_blehidd_pwm_buz_init(GPIO_BUZ_PWM, 0);
     }
     //configure LED
-    wiced_hal_gpio_configure_pin(GPIO_PORT_LED, GPIO_PULL_UP | GPIO_OUTPUT_ENABLE, 1);
+    wiced_hal_gpio_configure_pin(FINDME_LED, GPIO_PULL_UP | GPIO_OUTPUT_ENABLE, 1);
 
     wiced_init_timer( &findme_led_timer, bleremoteapp_alertLed_timeout, 0, WICED_MILLI_SECONDS_TIMER );
     wiced_init_timer( &findme_buz_timer, bleremoteapp_alertBuz_timeout, 0, WICED_MILLI_SECONDS_TIMER );
@@ -3131,7 +3065,7 @@ void bleremoteapp_alertLed_timeout(uint32_t unused)
 void bleremoteapp_alertLedOn(void)
 {
     //configure LED on
-    wiced_hal_gpio_set_pin_output(GPIO_PORT_LED, LED_ON);
+    wiced_hal_gpio_set_pin_output(FINDME_LED, LED_ON);
     appFindmeState->led_on = 1;
 }
 
@@ -3141,7 +3075,7 @@ void bleremoteapp_alertLedOn(void)
 void bleremoteapp_alertLedOff(void)
 {
     //configure LED off
-    wiced_hal_gpio_set_pin_output(GPIO_PORT_LED, LED_OFF);
+    wiced_hal_gpio_set_pin_output(FINDME_LED, LED_OFF);
     appFindmeState->led_on = 0;
 }
 
@@ -3179,7 +3113,7 @@ void bleremoteapp_alertLedStop(void)
         wiced_stop_timer(&findme_led_timer);
 
         //configure LED off
-        wiced_hal_gpio_set_pin_output(GPIO_PORT_LED, LED_OFF);
+        wiced_hal_gpio_set_pin_output(FINDME_LED, LED_OFF);
         appFindmeState->led_alert_active = 0; // led alert is deactivated.
     }
 }
@@ -3276,7 +3210,7 @@ uint8_t pollTouchpadActivity(void)
             {
                 if (dataAvailable != HID_EVENT_TP_INFO)
                 {
-                    if (!audioIsActive() && !motionIsEnabled())
+                    if (!audioIsActive())
                     {
                         //WICED_BT_TRACE("\npollTouchpadActivity: dataAvailable=%d, prt=0x%x", dataAvailable, bleRemoteAppState->touchpadEvent.userDataPtr);
                         wiced_hidd_event_queue_add_event_with_overflow(&bleRemoteAppState->appEventQueue,
@@ -3352,16 +3286,13 @@ void bleremoteapp_ota_fw_upgrade_status(uint8_t status)
         break;
 
     case OTA_FW_UPGRADE_STATUS_ABORTED:             // Aborted or failed verification */
-#ifdef SUPPORT_MOTION
-        if (!motionIsEnabled())
-#endif
 #ifdef SUPPORT_AUDIO
-            if (!audioIsActive())
+        if (!audioIsActive())
 #endif
-            {
-                WICED_BT_TRACE("\nallow slave latency 1");
-                wiced_blehidd_allow_slave_latency(TRUE);
-            }
+        {
+            WICED_BT_TRACE("\nallow slave latency 1");
+            wiced_blehidd_allow_slave_latency(TRUE);
+        }
         break;
 
     case OTA_FW_UPGRADE_STATUS_COMPLETED:           // firmware upgrade completed, will reboot

@@ -104,10 +104,6 @@ ENABLE_SCROLL
     Use this option to enable scroll function. This option requires actual demo mouse
     that has quadrature hardware.
 
-ENABLE_MOTION
-    Use this option to enable motion function. This option requires actual demo mouse
-    hardware to be functional.
-
 ASSYMETRIC_SLAVE_LATENCY
     Use this option to enable assymetric slave latency.
 

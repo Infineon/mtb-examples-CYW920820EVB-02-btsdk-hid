@@ -99,16 +99,12 @@ typedef enum
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_BITMAP_CHAR_CFG_DESCR, //charconfig desc handl
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_BITMAP_RPT_REF_DESCR, // char desc handl
 
-        HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_MOTION,         // characteristic handl
-        HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_MOTION_VAL,     // char value handle
-        HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_MOTION_CHAR_CFG_DESCR, //charconfig desc handl
-        HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_MOTION_RPT_REF_DESCR, // char desc handl
-
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_USER_DEFINED_0,         // characteristic handl
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_USER_DEFINED_0_VAL,     // char value handle
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_USER_DEFINED_0_CHAR_CFG_DESCR, //charconfig desc handl
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_USER_DEFINED_0_RPT_REF_DESCR, // char desc handl
 
+#ifdef HID_AUDIO
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_VOICE,         // characteristic handl
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_VOICE_VAL,     // char value handle
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_VOICE_CHAR_CFG_DESCR, //charconfig desc handl
@@ -122,12 +118,14 @@ typedef enum
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_VOICE_CTRL_FEA,        // characteristic handl
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_VOICE_CTRL_FEA_VAL,    // char value handle
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_VOICE_CTRL_FEA_RPT_REF_DESCR, // char desc handl
+#endif
 
+#ifdef SUPPORT_TOUCHPAD
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_TOUCHPAD,                // characteristic handl
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_TOUCHPAD_VAL,            // char value handle
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_TOUCHPAD_CHAR_CFG_DESCR, //charconfig desc handl
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_TOUCHPAD_RPT_REF_DESCR,  // char desc handl
-
+#endif
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_CONNECTION_CTRL,         // characteristic handl
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_CONNECTION_CTRL_VAL,     // char value handle
         HANDLE_BLEREMOTE_LE_HID_SERVICE_HID_RPT_CONNECTION_CTRL_RPT_REF_DESCR, // char desc handl

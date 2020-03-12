@@ -88,10 +88,6 @@
 #include "ble_mouse_gatts.h"
 #include "ble_mouse.h"
 
-#ifdef SUPPORT_MOTION
-#include "motion/hidd_motion.h"
-#endif
-
 #include "hidd_lib.h"
 
 //#define MOUSE_DEBUG
@@ -325,29 +321,6 @@ void blemouseapp_create(void)
     wiced_platform_register_button_callback(P_L_CLICK_IDX, L_click_button_interrupt_handler, NULL, WICED_PLATFORM_BUTTON_BOTH_EDGE);
 #endif
 
-#ifdef SUPPORT_MOTION
- #ifdef MOUSE_PLATFORM
-    uint8_t cs = wiced_platform_get_function_gpio_pin(WICED_SPI_1_CS);
-    uint8_t clk = wiced_platform_get_function_gpio_pin(WICED_SPI_1_CLK);
-    uint8_t mosi = wiced_platform_get_function_gpio_pin(WICED_SPI_1_MOSI);
-    uint8_t miso = wiced_platform_get_function_gpio_pin(WICED_SPI_1_MISO);
-    uint32_t pinCfg = (cs << 24) | (clk << 16) |(mosi << 8) | miso;
-
-    if (cs > WICED_P39 || clk > WICED_P39 || mosi > WICED_P39 || miso > WICED_P39)
-    {
-        WICED_BT_TRACE("\nError, SPI pins are not assigned");
-    }
-    else
-    {
-        WICED_BT_TRACE("\nSPI CS/CLK/MOSI/MISO is assigned to p%d/p%d/p%d/p%d", cs,clk,mosi,miso);
-    }
- #else
-    #define pinCfg 0
- #endif
-    motion_init(mouseapp_userMotionXYDetected, NULL, pinCfg, P_MOTION);
-    trigger(2);
-#endif
-
     //initialize event queue
     wiced_hidd_event_queue_init(&mouseAppState->mouseappEventQueue, (uint8_t *)wiced_memory_permanent_allocate(blemouseAppConfig.maxEventNum * blemouseAppConfig.maxEventSize),
                     blemouseAppConfig.maxEventSize, blemouseAppConfig.maxEventNum);
@@ -431,13 +404,6 @@ void mouseapp_init(void)
         wiced_blehidd_register_report_table(mbootModeGattMap, sizeof(mbootModeGattMap)/sizeof(mbootModeGattMap[0]));
     }
 
-#ifdef SUPPORT_MOTION
-    if (wiced_hidd_is_paired())
-    {
-        WICED_BT_TRACE("\nMOTION INTR enabled!");
-        motion_enableIntr(WICED_TRUE);
-    }
-#endif
     wiced_hidd_link_init();
 
     wiced_hal_mia_enable_mia_interrupt(TRUE);
@@ -456,11 +422,6 @@ void mouseapp_shutdown(void)
 #ifdef SUPPORT_SCROLL
     // Disable the quadrature HW
     wiced_hal_quadrature_turnOff();
-#endif
-
-#ifdef SUPPORT_MOTION
-     //power down
-    motion_powerDown();
 #endif
 
     // Disable button detection
@@ -547,10 +508,6 @@ uint8_t mouseapp_pollActivityUser(void)
     // Poll the hardware for events
     wiced_hal_mia_pollHardware();
 
-#ifdef SUPPORT_MOTION
-    // Check for XY motion
-    mouseapp_pollActivityXYSensor();
-#endif
 #ifdef SUPPORT_SCROLL
     // Check for scroll
     mouseapp_pollActivityScroll();
@@ -769,11 +726,6 @@ void mouseapp_stateChangeNotification(uint32_t newState)
 
     trigger(5);
 
-#ifdef SUPPORT_MOTION
-    // We enable interrupt if link is not connect.
-    motion_enableIntr(newState != BLEHIDLINK_CONNECTED);
-#endif
-
     if(newState == BLEHIDLINK_CONNECTED)
     {
         //get host client configuration characteristic descriptor values
@@ -887,105 +839,6 @@ void mouseapp_clientConfWriteRptStd(wiced_hidd_report_type_t reportType,
     mouseapp_updateClientConfFlags(notification, MOUSEAPP_CLIENT_CONFIG_NOTIF_STD_RPT);
 }
 
-#ifdef SUPPORT_MOTION
-/////////////////////////////////////////////////////////////////////////////////
-/// This function polls the XY sensor to get any newly detected XY count.
-/// It negates the data and performs any scaling if configured to do so.
-/// If configured to do so, it discards any fractional value after the configured
-/// number of polls. If any non-fractional XY activity is accumulated,
-/// it queues an XY motion event.
-/////////////////////////////////////////////////////////////////////////////////
-void mouseapp_pollActivityXYSensor(void)
-{
-    int16_t xCurrent = 0, yCurrent = 0, tmp = 0;
-
-    trigger(6);
-    // Check for XY motion
-    while (motion_getMotion(&xCurrent, &yCurrent, blemouseAppConfig.maxNumXYReadsPerPoll))
-    {
-        if (xCurrent || yCurrent)
-        {
-            // Swap XY if enabled
-            if (blemouseAppConfig.swapXY)
-            {
-                // Use global temporary for swapping
-                tmp = xCurrent;
-                xCurrent = yCurrent;
-                yCurrent = tmp;
-            }
-
-            // Negate X if enabled
-            if (blemouseAppConfig.negateX)
-            {
-                xCurrent = -xCurrent;
-            }
-
-            // Negate Y if enabled
-            if (blemouseAppConfig.negateY)
-            {
-                yCurrent = -yCurrent;
-            }
-
-            mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in++].eventInfo.eventType = HID_EVENT_MOTION_AXIS_X_Y;
-            if (mouseAppState->motion_fifo_in == MOTION_FIFO_CNT)
-            {
-                mouseAppState->motion_fifo_in = 0;
-            }
-
-            // Check if XY scaling is enabled
-            if (blemouseAppConfig.xScale | blemouseAppConfig.yScale)
-            {
-                // Yes. Add the new motion to the accumulated motion
-                mouseAppState->mouseapp_xFractional += xCurrent;
-                mouseAppState->mouseapp_yFractional += yCurrent;
-
-                // Scale and adjust accumulated X motion value. Fractional value will be
-                // left in the factional part. Place the whole number in the XY motion event.
-                mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionX = mouseapp_scaleValue(&mouseAppState->mouseapp_xFractional, blemouseAppConfig.xScale);
-
-                // Scale and adjust accumulated Y motion value. Fractional value will be
-                // left in the factional part. Place the whole number in the XY motion event.
-                mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionY = mouseapp_scaleValue(&mouseAppState->mouseapp_yFractional, blemouseAppConfig.yScale);
-
-                // Reset the XY discard counter
-                mouseAppState->mouseapp_pollsSinceXYMotion = 0;
-            }
-            else
-            {
-                // Scaling is not enabled. Place the detected XY motion directly in the xy event
-                mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionX = xCurrent;
-                mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionY = yCurrent;
-            }
-
-            WICED_BT_TRACE("\nM xy:%d,%d", mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionX, mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].motionY);
-            // Queue the event with the proper seqn
-            wiced_hidd_event_queue_add_event_with_overflow(&mouseAppState->mouseappEventQueue, &mouseAppState->mouseapp_xyMotionEvent[mouseAppState->motion_fifo_in].eventInfo, sizeof(HidEventMotionXY), mouseAppState->mouseapp_pollSeqn);
-        }
-        else
-        {
-            // If XY scaling timeout is not infinite, bump up the
-            // inactivity counter and check if we have crossed the threshold.
-            if (blemouseAppConfig.pollsToKeepFracXYData &&
-                ++mouseAppState->mouseapp_pollsSinceXYMotion >= blemouseAppConfig.pollsToKeepFracXYData)
-            {
-                // We have. Discard any fractional XY data
-                mouseAppState->mouseapp_xFractional = mouseAppState->mouseapp_yFractional = 0;
-
-                // Reset the XY poll counter
-                mouseAppState->mouseapp_pollsSinceXYMotion = 0;
-            }
-        }
-    }
-}
-
-// Motion interrupt
-void mouseapp_userMotionXYDetected(void* unused, uint8_t port)
-{
-    WICED_BT_TRACE("\nm");
-    mouseapp_pollReportUserActivity();
-}
-#endif
-
 /////////////////////////////////////////////////////////////////////////////////
 /// This function processes queued events to complete data collection for one
 /// report set. A report set is defined as:
@@ -1039,12 +892,6 @@ void mouseapp_generateReportSet(void)
                 break;
 
             case HID_EVENT_MOTION_AXIS_X_Y:
-#ifdef SUPPORT_MOTION
-                //NOTE: We'd like to disable motion interrupt and rely on app polling to stream motion XY movement.
-                //Otherwise, too many motion interrupt will cause unnecessary handling and make the motion XY movement unsmooth.
-                //disable motion INTERRUPT
-                motion_enableIntr(WICED_FALSE);
-#endif
                 // Update XY counts
                 mouseAppState->mouseapp_xMotion += ((HidEventMotionXY *)event)->motionX;
                 mouseAppState->mouseapp_yMotion += ((HidEventMotionXY *)event)->motionY;
@@ -1413,11 +1260,7 @@ uint32_t mouseapp_sleep_handler(wiced_sleep_poll_type_t type )
  #if SLEEP_ALLOWED > 1
             ret = WICED_SLEEP_ALLOWED_WITH_SHUTDOWN;
             // a key is down, no deep sleep
-            if (wiced_hal_keyscan_is_any_key_pressed()
-  #ifdef SUPPORT_MOTION
-                || motion_isActive()
-  #endif
-               )
+            if (wiced_hal_keyscan_is_any_key_pressed())
  #endif
             ret = WICED_SLEEP_ALLOWED_WITHOUT_SHUTDOWN;
             break;

@@ -1763,10 +1763,17 @@ void kbapp_stateChangeNotification(uint32_t newState)
         WICED_BT_TRACE("discoverable");
         wiced_hidd_led_blink(KB_LED_LE_LINK, 0, 500);     // blink LINK line to indicate pairing
     }
+    else if (newState == BLEHIDLINK_RECONNECTING)
+    {
+        WICED_BT_TRACE("\nReconnecting");
+        wiced_hidd_led_blink(KB_LED_LE_LINK, 0, 200);     // faster blink LINK line to indicate reconnecting
+    }
+#if 0
     else if ((newState == BLEHIDLINK_ADVERTISING_IN_uBCS_DIRECTED) || (newState == BLEHIDLINK_ADVERTISING_IN_uBCS_UNDIRECTED))
     {
         wiced_hidd_set_deep_sleep_allowed(WICED_TRUE);
     }
+#endif
 
     if(firstTransportStateChangeNotification)
         firstTransportStateChangeNotification = 0;

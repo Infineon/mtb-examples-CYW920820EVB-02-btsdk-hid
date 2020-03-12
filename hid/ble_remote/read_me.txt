@@ -5,8 +5,9 @@ BLE Remote Control
 Overview
 --------
 
-The BLE Remote Control application is a single chip SoC compliant with HID over GATT Profile (HOGP).
-Supported features include key, microphone (voice over HOGP), Infrared Transmit (IR TX), TouchPad.
+The BLE Remote Control application is a single chip SoC compliant with HID over GATT Profile
+(HOGP). Supported features include key, microphone (voice over HOGP), Infrared Transmit
+(IR TX), TouchPad.
 
 During initialization the app registers with LE stack, WICED HID Device Library and
 keyscan and external HW peripherals to receive various notifications including
@@ -34,23 +35,28 @@ Features demonstrated
 -------------
 To demonstrate the app, walk through the following steps -
 1. Plug the WICED board or the 20819A1 Remote Control HW into your computer
-2. Put on jumper to bypass Serial Flash (i.e. jumper on J5 in CYW920819EVB_02 board), then power up the board or Remote Control HW.
+2. Put on jumper to bypass Serial Flash (i.e. jumper on J5 in CYW920819EVB_02 board),
+   then power up the board or Remote Control HW.
 3. Remove the jumper so that download procedure below can write to Serial Flash.
 4. Build and download the application (to the EVAL board or Remote Control HW).
 5. If download failed due to not able to detecting device, just repeat step 4 again.
-6. Unplug the EVAL board or Remote Control HW from your computer (i.e. unplug the UART cable)
+6. Unplug the EVAL board or Remote Control HW from your computer (i.e. unplug the
+   UART cable)
 7. Power cycle the EVAL board or Remote Control HW.
 8. Press any key to start LE advertising, then pair with a TV
-   If using the CYW920819EVB_02 board, use a fly wire to connect GPIO P0 and P11 to simulate key '0' press,
-    and remove the wire to simulate key release.
+   If using the CYW920819EVB_02 board, use a fly wire to connect GPIO P0 and P11
+   to simulate key '0' press, and remove the wire to simulate key release.
 9. Once connected, it becomes the remote control of the TV.
 10. If you have the 20819A1 Remote Control HW:
     - Press and hold microphone key, voice streaming starts until the key is released.
     - Touch touchpad, touchpad report will be sent to the TV.
 
-In case what you have is the WICED EVAL board, you can either use fly wire to connect to GPIOs to simulate key press and release.
-Or using the ClientControl tool in the tools to simulate key press and release.
-1. Plug the WICED EVAL board into your computer
+In case what you have is the WICED EVAL board, you can either use fly wire to connect
+to GPIOs to simulate key press and release. Or using the ClientControl tool in the
+tools to simulate key press and release.
+1. Plug the WICED EVAL board into your computer.
+   When using CYW920819EVB_02/CYW920820EVB_02, remove the 'PERIPHERAL ENABLE' J18
+   and 'THERMISTER ENABLE" J14 jumpers.
 2. Build and download the application (to the WICED board).
 3. If failed to download due to device not detected, just repeat step 2 again.
 4. Press any key to start LE advertising, then pair with a TV
@@ -67,7 +73,8 @@ In ModusToolbox, select right click on app and select 'Change Application Settin
 4. Run ClientControl.exe.
 5. Choose 3M as Baudrate and select the serial port in ClientControl tool window.
 6. Press Reset button on the board and open the port.
-7. Press "Enter Pairing Mode"or "Connect" to start LE advertising, then pair with a PC or Tablet
+7. Press "Enter Pairing Mode"or "Connect" to start LE advertising, then pair with a
+   PC or Tablet
 8. Once connected, it becomes the remote control of the TV.
  - Select Interrupt channel, Input report, enter the contents of the report
    and click on the Send button, to send the report.  For example to send
@@ -108,9 +115,13 @@ AUTO_RECONNECT
     otherwise, it may drain battery quickly if host was not available to reconnect.
 
 DISCONNECTED_ENDLESS_ADV
-    Use this option to enable disconnected endless advertisement. When this option
-    is used, the device will do advertising forever until it is connected. To
-    conserve power, it allows SDS/ePDS and do the advertising in a long interval.
+    Use this option to enable disconnected endless advertisement. When the link is
+    disconnected, if AUTO_RECONNECT is set, it will automatically starts adervise for
+    reconnect. Otherwise, it will start advertise after an external event, such as
+    key press event; i.e. user will need to press a key to start reconnect. Once it
+    starts to advertise, it will attempt to reconnect forever until it is connected.
+    To conserve power, it allows SDS/ePDS while in low density advertisement with a
+    long interval.
 
 SKIP_PARAM_UPDATE
     Use this option to skip to send link parameter update request.
@@ -169,9 +180,9 @@ ENABLE_FINDME
     Use this option to enable Find Me profile.
 
 ENABLE_AUDIO
-    Use this option to enable audio function to send voice over HOGP (HID over
-    GATT Protocol). By default, mSBC encoding method is used unless one of the
-    following option is enabled:
+  Use this option to enable audio function to send voice over HOGP (HID over
+  GATT Protocol). By default, mSBC encoding method is used unless one of the
+  following option is enabled:
 
   OPUS_CELT_ENCODER: use Opus Celt encoder
   ADPCM_ENCODER: use ADPCM encoder
@@ -180,8 +191,16 @@ ENABLE_AUDIO
     method is used.
 
   ENABLE_DIGITAL_MIC
-    Use this option to enable digital microphone. ENABLE_AUDIO option must be
-    enabled for this option to take effect.
+    Use this option to disable digital microphone (ENABLE_DIGITAL_MIC=0).
+    ENABLE_AUDIO option must be enabled for this option to take effect.
+
+ENABLE_ANDROID_AUDIO
+  When this option is enabled, the Android TV Voice Service is enabled. It forces
+  the following options:
+
+  ENABLE_AUDIO: Audio is enabled
+  ADPCM_ENCODER: Forced to use ADPCM encoder (forced OPUS_CELT_ENCODER=0)
+  ENABLE_DIGITAL_MIC: The default is on and can be turned of by "ENABLE_DIGITAL_MIC=0"
 
 ENABLE_TOUCHPAD
     Use this option to enable touchpad functions. The option requires actual
@@ -192,26 +211,20 @@ ENABLE_IR
     remote hardware to be functional. A sample dummy IR protocol is used. The
     developer will need to decide and implement the actual IR protocol.
 
-ENABLE_MOTION
-    Use this option to enable motion function. The option requires actual demo
-    remote hardware to be functional.
-
-  POLL_MOTION_WHILE_CONNECTED
-    Use this option to enable poll motion while connected. This option takes
-    effect only if ENABLE_MOTION option is enabled. When this option is used,
-    the motion interrupt will be used only to wake up the device. The motion
-    data will be polled by activity polling routine. When this option is disabled,
-    the motion data will be collected by motion interrupt. This option takes
-    effect only if ENABLE_MOTION option is enabled.
-
-  ENABLE_MOTION_AS_AIR_MOUSE
-    Use this option to enable motion as Air Mouse. This option takes effect
-    only if ENABLE_MOTION option is enabled.
-
-    When this option is used, the device will send mouse report instead of motion
-    report to HID host. This sample code uses 3rd party proprietary library for
-    motion to mouse data conversion. Cypress semiconductor does not own this
-    conversion algorithm. Who wish to enable this option, will need to contact
-    the 3rd party or to develop their own conversion algorithm.
-
 -------------------------------------------------------------------------------
+
+
+Key Matrix
+----------
+Key Matrix (ROW,COL) = (5,4) = (P00..P04, P08..P11)
+Key index n = (row, col) = (n % ROW, n / ROW). For example, when n = 16,
+since we have ROW=5, row = 16%5 = 1, colomn = 16/5 = 3, therefore row=1, col=3
+
+AUDIO Key Index     16 = (row=1, col=3) = (P01, P11)
+IR Key Index        17 = (row=2, col=3) = (P02, P11)
+Pairing Key Index   18 = (row=3, col=3) = (P03, P11)
+
+Platforms
+---------
+CYW920819EVB_02/CYW920820EVB_02
+CYW920735Q60EVB-01
