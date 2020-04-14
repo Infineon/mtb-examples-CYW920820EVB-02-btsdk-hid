@@ -220,7 +220,6 @@ const uint8_t blehid_db_data[]=
     PRIMARY_SERVICE_UUID16
     ( HANDLE_BLEKB_LE_HID_SERVICE, UUID_SERVCLASS_LE_HID),
 
-
     // Include BSA SERVICE
     INCLUDE_SERVICE_UUID16
     (
@@ -250,7 +249,6 @@ const uint8_t blehid_db_data[]=
         LEGATTDB_PERM_READABLE
     ),
 
-
     // Handle 0x55: characteristic Boot Keyboard Input report, handle 0x56 characteristic value
     CHARACTERISTIC_UUID16
     (
@@ -261,7 +259,6 @@ const uint8_t blehid_db_data[]=
         LEGATTDB_PERM_READABLE
     ),
 
-
     // Declare client specific characteristic cfg desc. // Value of the descriptor can be modified by the client
     // Value modified shall be retained during connection and across connection // for bonded devices
     CHAR_DESCRIPTOR_UUID16_WRITABLE
@@ -270,7 +267,6 @@ const uint8_t blehid_db_data[]=
         GATT_UUID_CHAR_CLIENT_CONFIG,
         LEGATTDB_PERM_READABLE|LEGATTDB_PERM_WRITE_CMD|LEGATTDB_PERM_WRITE_REQ
     ),
-
 
     // Handle 0x58: characteristic Boot Keyboard Output report, handle 0x59 characteristic value
     CHARACTERISTIC_UUID16_WRITABLE
@@ -292,7 +288,6 @@ const uint8_t blehid_db_data[]=
         LEGATTDB_PERM_READABLE
     ),
 
-
     // include Battery Service
     // Handle 0x5C: external report reference
     CHAR_DESCRIPTOR_UUID16
@@ -301,7 +296,6 @@ const uint8_t blehid_db_data[]=
         GATT_UUID_EXT_RPT_REF_DESCR,
         LEGATTDB_PERM_READABLE
     ),
-
 
     // STD Input report
     // Handle 0x5D: characteristic HID Report, handle 0x5E characteristic value
@@ -462,7 +456,6 @@ const uint8_t blehid_db_data[]=
         LEGATTDB_PERM_READABLE
     ),
 
-
     // Connection control feature
     // Handle 0x74: characteristic HID Report, handle 0x75 characteristic value
     CHARACTERISTIC_UUID16_WRITABLE
@@ -494,15 +487,15 @@ const uint8_t blehid_db_data[]=
     ),
 
 #ifdef OTA_FIRMWARE_UPGRADE
-#ifdef OTA_SECURE_FIRMWARE_UPGRADE
+ #ifdef OTA_SECURE_FIRMWARE_UPGRADE
     // Handle 0xff00: Cypress vendor specific WICED Secure OTA Upgrade Service.
     PRIMARY_SERVICE_UUID128
     ( HANDLE_OTA_FW_UPGRADE_SERVICE, UUID_OTA_SEC_FW_UPGRADE_SERVICE ),
-#else
+ #else
     // Handle 0xff00: Cypress vendor specific WICED OTA Upgrade Service.
     PRIMARY_SERVICE_UUID128
     ( HANDLE_OTA_FW_UPGRADE_SERVICE, UUID_OTA_FW_UPGRADE_SERVICE ),
-#endif
+ #endif
 
     // Handles 0xff03: characteristic WS Control Point, handle 0xff04 characteristic value.
     CHARACTERISTIC_UUID128_WRITABLE
@@ -542,7 +535,7 @@ const uint16_t blehid_db_size = sizeof(blehid_db_data);
 
 /*****************************************************************************
  * This is the report map for HID Service
-  ****************************************************************************/
+ ****************************************************************************/
 const uint8_t blehid_rpt_map[] =
 {
             // STD_KB_REPORT_ID
@@ -708,7 +701,7 @@ const attribute_t blehid_gattAttributes[] =
 
     {
         HANDLE_BLEKB_GAP_SERVICE_CHAR_DEV_NAME_VAL,
-        sizeof(dev_local_name),
+        sizeof(dev_local_name)-1,
         dev_local_name  //fixed
     },
 
@@ -732,7 +725,7 @@ const attribute_t blehid_gattAttributes[] =
 
     {
         HANDLE_BLEKB_DEV_INFO_SERVICE_CHAR_MFR_NAME_VAL,
-        sizeof(dev_char_mfr_name_value),
+        sizeof(dev_char_mfr_name_value)-1,
         dev_char_mfr_name_value //fixed
     },
 
@@ -912,7 +905,6 @@ const attribute_t blehid_gattAttributes[] =
 };
 const uint16_t blehid_gattAttributes_size = sizeof(blehid_gattAttributes)/sizeof(attribute_t);
 
-
 /*****************************************************************************
 * Keyboard application configuration. Defines behavior of the keyboard
 * application
@@ -921,76 +913,76 @@ const uint16_t blehid_gattAttributes_size = sizeof(blehid_gattAttributes)/sizeof
 KbAppConfig kbAppConfig =
 {
     // Standard report ID
-    STD_KB_REPORT_ID,
+    .stdRptID = STD_KB_REPORT_ID,
 
     // Maximum number of keys in standard report
-    KEYRPT_MAX_KEYS_IN_STD_REPORT,
+    .maxKeysInStdRpt = KEYRPT_MAX_KEYS_IN_STD_REPORT,
 
     // Report ID of bit mapped report
-    BITMAPPED_REPORT_ID,
+    .bitReportID = BITMAPPED_REPORT_ID,
 
     // Number of bit mapped keys
-    BIT_MAPPED_MAX,
+    .numBitMappedKeys = BIT_MAPPED_MAX,
 
     // Sleep report ID
-    SLEEP_REPORT_ID,
+    .sleepReportID = SLEEP_REPORT_ID,
 
     // Pin report ID
-    NOT_USED_REPORT_ID,
+    .pinReportID = NOT_USED_REPORT_ID,
 
     // LED (output) reportID
-    LED_OUTPUT_REPORT_ID,
+    .ledReportID = LED_OUTPUT_REPORT_ID,
 
     // Default LED state is all off
-    0,
+    .defaultLedState = 0,
 #if USE_KEYSCAN_KEY_TO_PAIR
-    94, // index 94 -- lock key
+    .connectButtonScanIndex = 94, // index 94 -- lock key
 #else
     // Connect button scan index: for using one key_matrix key. Use 0xFF since we are using GPIO button.
-    0xff, // 69
+    .connectButtonScanIndex = 0xff, // 69
 #endif
 
     // Recovery poll count
-    3,
+    .recoveryPollCount = 3,
 
     // HW fifo threshold for idle rate report generation
-    3,
+    .hwFifoThresholdForIdleRateReports = 3,
 
     // Repeat the rollover report after every half a second, i.e. 1600 BT clocks
-    1600,
+    .repeatRateInBTClocksForRolloverRpt = 1600,
 
     // Only repeat the rollover report if the HW fifo has fewer than this number of packets
-    3,
+    .hwFifoThresholdForRolloverRepeats = 3,
 
     // Func lock report ID
-    FUNC_LOCK_REPORT_ID,
+    .funcLockReportID = FUNC_LOCK_REPORT_ID,
 
     // Default state of the func-lock key
-    0,
+    .defaultFuncLockState = 0,
 
     // Scroll report ID
-    SCROLL_REPORT_ID,
+    .scrollReportID = SCROLL_REPORT_ID,
 
     // Scroll report length
-    1,
+    .scrollReportLen = 1,
 
     // No negation of scroll values
-    FALSE,
+    .negateScroll = FALSE,
 
     // Scroll scaling of 2 (2^1) for normal mechanical scroll
-    1,
+    .scrollScale = 1,
 
     // Keep fractional scroll data around for 50 polls
-    50,
+    .pollsToKeepFracScrollData = 50,
 
     // Enable scroll combining
-    TRUE,
+    .scrollCombining = TRUE,
 
     // Size of each event
-    6,
+    .maxEventSize = 6,
 
     // Maximum number of events
-    44
+    .maxEventNum = 44
 };
 
 /*****************************************************************************
@@ -1193,9 +1185,8 @@ const uint8_t kbKeyConfig_size = sizeof(kbKeyConfig)/sizeof(KbKeyConfig);
 const wiced_bt_cfg_settings_t wiced_bt_hid_cfg_settings =
 {
     .device_name                         = (uint8_t*)dev_local_name,                                   /**< Local device name (NULL terminated) */
-    .device_class                        = {0x00, 0x05, 0xc0},                                         /**< Local device class */
+    .device_class                        = {0x04, 0x05, 0x00},                                         /**< Local device class */
     .security_requirement_mask           = BTM_SEC_ENCRYPT,                                            /**< Security requirements mask (BTM_SEC_NONE, or combinination of BTM_SEC_IN_AUTHENTICATE, BTM_SEC_OUT_AUTHENTICATE, BTM_SEC_ENCRYPT (see #wiced_bt_sec_level_e)) */
-
     .max_simultaneous_links              = 1,                                                          /**< Maximum number simultaneous links to different devices */
 
     .br_edr_scan_cfg =                                              /* BR/EDR scan config */
@@ -1334,11 +1325,11 @@ const wiced_bt_cfg_settings_t wiced_bt_hid_cfg_settings =
     .max_number_of_buffer_pools         = 4,                                                           /**< Maximum number of buffer pools in p_btm_cfg_buf_pools and by wiced_create_pool */
 
     /* Interval of  random address refreshing */
-#ifdef LE_LOCAL_PRIVACY_SUPPORT
+ #ifdef LE_LOCAL_PRIVACY_SUPPORT
     .rpa_refresh_timeout                = WICED_BT_CFG_DEFAULT_RANDOM_ADDRESS_CHANGE_TIMEOUT,          /**< Interval of  random address refreshing - secs */
-#else
+ #else
     .rpa_refresh_timeout                = WICED_BT_CFG_DEFAULT_RANDOM_ADDRESS_NEVER_CHANGE,            /**< Interval of  random address refreshing - secs */
-#endif
+ #endif
     /* BLE white list size */
     .ble_white_list_size                = 0,                                                           /**< Maximum number of white list devices allowed. Cannot be more than 128 */
 #endif

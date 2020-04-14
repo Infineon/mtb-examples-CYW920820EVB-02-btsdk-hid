@@ -411,7 +411,7 @@ const attribute_t blehid_gattAttributes[] =
 {
     {
         HANDLE_BLEMOUSE_GAP_SERVICE_CHAR_DEV_NAME_VAL,
-        sizeof(dev_local_name),
+        sizeof(dev_local_name)-1,
         dev_local_name  //fixed
     },
 
@@ -435,7 +435,7 @@ const attribute_t blehid_gattAttributes[] =
 
     {
         HANDLE_BLEMOUSE_DEV_INFO_SERVICE_CHAR_MFR_NAME_VAL,
-        sizeof(dev_char_mfr_name_value),
+        sizeof(dev_char_mfr_name_value)-1,
         dev_char_mfr_name_value //fixed
     },
 
