@@ -37,7 +37,7 @@
 #include "IQS5xx.h"
 #include "../interrupt.h"
 #include "wiced_bt_trace.h"
-#include "ble_remote.h"
+#include "app.h"
 
 // include "localdbg.h" to enable debug code
 //#include "localdbg.h"
@@ -124,7 +124,7 @@ TPDrv_t * IQS5xx(uint8_t rdy)
     //i2cBB = i2cBitbang(GPIO_SCL, GPIO_SDA, TPBL_I2C_ADDRESS);
     pDev->rdyGPIO = rdy;
     pDev->rpt.count = 0;
-    pDev->rpt.reportID = RPT_ID_IN_ABS_XY;
+    pDev->rpt.reportID = RPT_ID_IN_IN_ABS_XY;
 
     return tpDrv;
 }

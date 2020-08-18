@@ -36,15 +36,14 @@
  * TouchPad implementation
  *
  */
-
+#include "app.h"
 #ifdef SUPPORT_TOUCHPAD
 
-#include "touchPad.h"
-#include "../interrupt.h"
-#include "wiced_bt_trace.h"
-#include "ble_remote.h"
-
 #define MAX_TP_EVENT_DELAY_IN_MS    100
+TouchPadIf_t  * touchpad   = NULL;
+uint8_t  app_touchpad_rpt[TOUCHPAD_RPT_PAYLOAD_SIZE] = {0, };
+#define touchpad_is_active()(touchpad && touchpad->isActive())
+
 
 static Area_t zone[ZONE_MAX_COUNT] = {
      {{0x0060, 0x00d0}, {0x0120, 0x01a0}},    // Zone CENTER
@@ -54,51 +53,47 @@ static Area_t zone[ZONE_MAX_COUNT] = {
      {{0x0130, 0x0080}, {0x01f0, 0x0180}},    // zone UP
 };
 
-void TouchPad_initialize();
-void TouchPad_reInitialize();
-void TouchPad_shutdown();
-void TouchPad_clearEvent();
-void TouchPad_setEnable(uint8_t en);
-uint8_t TouchPad_getInfo();
-uint8_t TouchPad_isActive();
-uint8_t TouchPad_isFunctional();
-uint8_t TouchPad_getPinActive();
-uint8_t TouchPad_fingerCount();
-uint8_t TouchPad_waitForEvent(uint32_t waitInMs);
-uint8_t TouchPad_getZone();
-uint8_t TouchPad_getLeftRight();
-uint8_t TouchPad_wakeUp();
-uint8_t  TouchPad_readFirmwareVersion(uint8_t * buff);
-uint8_t  TouchPad_proximityRpt();
-AbsXYRptPtr TouchPad_getAbsFingerUpRpt();
-uint8_t TouchPad_pollActivity(HidEventTouchpad* dataPtr, uint8_t ignore);
+void touchpad_initialize();
+void touchpad_reInitialize();
+void touchpad_clearEvent();
+void touchpad_setEnable(uint8_t en);
+uint8_t touchpad_getInfo();
+uint8_t touchpad_isActive();
+uint8_t touchpad_isFunctional();
+uint8_t touchpad_getPinActive();
+uint8_t touchpad_fingerCount();
+uint8_t touchpad_waitForEvent(uint32_t waitInMs);
+uint8_t touchpad_getLeftRight();
+uint8_t touchpad_wakeUp();
+uint8_t  touchpad_readFirmwareVersion(uint8_t * buff);
+uint8_t  touchpad_proximityRpt();
+AbsXYRptPtr touchpad_getAbsFingerUpRpt();
+uint8_t touchpad_pollActivity(HidEventTouchpad* dataPtr, uint8_t ignore);
 static TouchPadIf_t   theTouchPadIface = {
-    TouchPad_initialize,
-    TouchPad_reInitialize,
-    TouchPad_shutdown,
-    TouchPad_clearEvent,
-    TouchPad_setEnable,
-    TouchPad_getInfo,
-    TouchPad_isActive,
-    TouchPad_isFunctional,
-    TouchPad_getPinActive,
-    TouchPad_fingerCount,
-    TouchPad_waitForEvent,
-    TouchPad_getZone,
-    TouchPad_getLeftRight,
-    TouchPad_wakeUp,
-    TouchPad_readFirmwareVersion,
-    TouchPad_proximityRpt,
-    TouchPad_getAbsFingerUpRpt,
+    touchpad_initialize,
+    touchpad_reInitialize,
+    touchpad_clearEvent,
+    touchpad_setEnable,
+    touchpad_getInfo,
+    touchpad_isActive,
+    touchpad_isFunctional,
+    touchpad_getPinActive,
+    touchpad_fingerCount,
+    touchpad_waitForEvent,
+    touchpad_getLeftRight,
+    touchpad_wakeUp,
+    touchpad_readFirmwareVersion,
+    touchpad_proximityRpt,
+    touchpad_getAbsFingerUpRpt,
 
-    TouchPad_pollActivity,
+    touchpad_pollActivity,
 };
 static TouchPadIf_t * tpIf = &theTouchPadIface;
 
 static TPDrv_t *    tpDrv;
 static Intr_State   tpIntr;
-static TouchPad_t   theTouchPad;
-static TouchPad_t * pDev = &theTouchPad;
+static touchpad_t   theTouchPad;
+static touchpad_t * pDev = &theTouchPad;
 
 #ifdef HANDLE_STUCK_FINGER
 static void Touchpad_stuckFingerTimerCb(uint32_t unused);
@@ -157,6 +152,60 @@ static void Touchpad_stuckFingerTimerCb(uint32_t unused)
 }
 #endif
 
+///////////////////////////////////////////////////////////////////////////////
+// returns first finger at left or right
+///////////////////////////////////////////////////////////////////////////////
+static uint8_t touchpad_waitForFingerDown()
+{
+    HidEventTouchpad event;
+    uint8_t ver[2];
+
+     // The x/y report is in the 2nd report followed by state change
+    uint8_t retry = 4;
+    // if we don't have touchpad finger status yet, we wait for touchpad event
+    while (retry-- && !tpDrv->fingerCount())
+    {
+        if (touchpad_waitForEvent(MAX_TP_EVENT_DELAY_IN_MS))
+        {
+            touchpad_pollActivity(&event,FALSE);
+        }
+    }
+
+    // finger is down, it is good
+    if (tpDrv->fingerCount())
+    {
+        return TRUE;
+    }
+
+    // no finger is down, something is wrong, reset the TP
+    if (!pDev->verifiedWorking && !tpDrv->readFirmwareVersion(ver))   // touchpad is not functional
+    {
+//WICED_BT_TRACE("\ntp re-init");
+        touchpad_reInitialize();
+    }
+    return FALSE;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// returns first finger at left or right
+//
+///////////////////////////////////////////////////////////////////////////////
+uint8_t touchpad_getLeftRight()
+{
+    if (touchpad_waitForFingerDown()) // Has TP finger data
+    {
+        uint16_t tpPos;
+
+        // distinguich touch position from Y pos[0]
+        tpPos = (tpDrv->getRpt())->xyData.fingers[0].Ypos_H << 8;
+        tpPos |= (tpDrv->getRpt())->xyData.fingers[0].Ypos_L;
+
+        return tpPos < CLICK_THRESHOLD ? CLICK_RIGHT : CLICK_LEFT;
+    }
+    return CLICK_NONE;
+}
+
+#if USE_TOUCHPAD_VIRTUAL_KEY
 /////////////////////////////////////////////////////////////////////////////////
 /// Check whether a finger is in a specified zone
 /// \param zone: the zone to check
@@ -172,7 +221,7 @@ static uint8_t inZone(AreaPtr zone, PosPtr pos)
 ///////////////////////////////////////////////////////////////////////////////
 // returns first finger zone
 ///////////////////////////////////////////////////////////////////////////////
-static uint8_t TouchPad_getTouchpadZone()
+static uint8_t getTouchpadZone()
 {
     Pos_t pos;
     int zoneIndex;
@@ -198,71 +247,19 @@ static uint8_t TouchPad_getTouchpadZone()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// returns first finger at left or right
-///////////////////////////////////////////////////////////////////////////////
-static uint8_t TouchPad_waitForFingerDown()
-{
-    HidEventTouchpad event;
-    uint8_t ver[2];
-
-     // The x/y report is in the 2nd report followed by state change
-    uint8_t retry = 4;
-    // if we don't have touchpad finger status yet, we wait for touchpad event
-    while (retry-- && !tpDrv->fingerCount())
-    {
-        if (TouchPad_waitForEvent(MAX_TP_EVENT_DELAY_IN_MS))
-        {
-            TouchPad_pollActivity(&event,FALSE);
-        }
-    }
-
-    // finger is down, it is good
-    if (tpDrv->fingerCount())
-    {
-        return TRUE;
-    }
-
-    // no finger is down, something is wrong, reset the TP
-    if (!pDev->verifiedWorking && !tpDrv->readFirmwareVersion(ver))   // touchpad is not functional
-    {
-//WICED_BT_TRACE("\ntp re-init");
-        TouchPad_reInitialize();
-    }
-    return FALSE;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// returns first finger at left or right
-//
-///////////////////////////////////////////////////////////////////////////////
-uint8_t TouchPad_getLeftRight()
-{
-    if (TouchPad_waitForFingerDown()) // Has TP finger data
-    {
-        uint16_t tpPos;
-
-        // distinguich touch position from Y pos[0]
-        tpPos = (tpDrv->getRpt())->xyData.fingers[0].Ypos_H << 8;
-        tpPos |= (tpDrv->getRpt())->xyData.fingers[0].Ypos_L;
-
-        return tpPos < CLICK_THRESHOLD ? CLICK_RIGHT : CLICK_LEFT;
-    }
-    return CLICK_NONE;
-}
-
-///////////////////////////////////////////////////////////////////////////////
 // returns first finger zone
 ///////////////////////////////////////////////////////////////////////////////
-uint8_t TouchPad_getZone()
+static uint8_t getZone()
 {
-    return TouchPad_waitForFingerDown() ? TouchPad_getTouchpadZone() : ZONE_UNDEFINED;
+    return touchpad_waitForFingerDown() ? getTouchpadZone() : ZONE_UNDEFINED;
 }
 
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 // wake up TP
 ///////////////////////////////////////////////////////////////////////////////
-uint8_t TouchPad_wakeUp()
+uint8_t touchpad_wakeUp()
 {
     return tpDrv->wakeUp();
 }
@@ -270,10 +267,10 @@ uint8_t TouchPad_wakeUp()
 ///////////////////////////////////////////////////////////////////////////////
 // After initialization, the touchpad interrupt is disabled
 ///////////////////////////////////////////////////////////////////////////////
-void TouchPad_initialize()
+void touchpad_initialize()
 {
     intrVtblPtr->setInterruptEnable(&tpIntr, FALSE);
-    TouchPad_clearEvent();
+    touchpad_clearEvent();
     if (tpDrv->init())
     {
         intrVtblPtr->setInterruptEnable(&tpIntr, TRUE);
@@ -289,20 +286,20 @@ void TouchPad_initialize()
 ///////////////////////////////////////////////////////////////////////////////
 // Re-init TP
 ///////////////////////////////////////////////////////////////////////////////
-void TouchPad_reInitialize()
+void touchpad_reInitialize()
 {
     tpDrv->hwReset();
-    TouchPad_initialize();
+    touchpad_initialize();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // shutdown TP
 ///////////////////////////////////////////////////////////////////////////////
-void TouchPad_shutdown()
+void touchpad_shutdown()
 {
     // turn off interrupt
     intrVtblPtr->setInterruptEnable(&tpIntr, FALSE);
-    TouchPad_clearEvent();
+    touchpad_clearEvent();
 #if SHUTDOWN_TP_BY_RSTN
     TP_RSTN_HoldReset();    // simply hold TP in reset condition
 #else
@@ -313,7 +310,7 @@ void TouchPad_shutdown()
 ///////////////////////////////////////////////////////////////////////////////
 // clear interrupt and the TP data
 ///////////////////////////////////////////////////////////////////////////////
-void TouchPad_clearEvent()
+void touchpad_clearEvent()
 {
     intrVtblPtr->clearInterrupt(&tpIntr);   // clear interrupt controller int pending
     tpDrv->clearData();
@@ -322,7 +319,7 @@ void TouchPad_clearEvent()
 ///////////////////////////////////////////////////////////////////////////////
 // Check if TP is suspended, re-init if yes.
 ///////////////////////////////////////////////////////////////////////////////
-void TouchPad_checkForSuspend()
+void touchpad_checkForSuspend()
 {
     // Touchpad could be temporary suspended if touchpad is requesting for initialization
     // This function gets call when there is no high current option. (Both Audio and IR is not active)
@@ -330,7 +327,7 @@ void TouchPad_checkForSuspend()
     if (pDev->tpSuspend)
     {
         pDev->tpSuspend = FALSE;
-        TouchPad_reInitialize();
+        touchpad_reInitialize();
     }
 }
 
@@ -340,7 +337,7 @@ void TouchPad_checkForSuspend()
 /// \param  ignore: Whether to ignore the retrieved data
 /// \return event code indicating data availability
 ///////////////////////////////////////////////////////////////////////////////
-uint8_t TouchPad_pollActivity(HidEventTouchpad* dataPtr, uint8_t ignore)
+uint8_t touchpad_pollActivity(HidEventTouchpad* dataPtr, uint8_t ignore)
 {
     while (intrVtblPtr->isInterruptPinActive(&tpIntr))
     {
@@ -359,7 +356,7 @@ uint8_t TouchPad_pollActivity(HidEventTouchpad* dataPtr, uint8_t ignore)
             // something is wrong, reset the touchpad
             if (!goodRead)
             {
-                TouchPad_reInitialize();
+                touchpad_reInitialize();
             }
             else if (!pDev->tpSuspend) // reset request from TP
             {
@@ -435,7 +432,7 @@ uint8_t TouchPad_pollActivity(HidEventTouchpad* dataPtr, uint8_t ignore)
         }
         else
         {
-            TouchPad_reInitialize();
+            touchpad_reInitialize();
         }
     }
     return HID_EVENT_NONE;
@@ -446,7 +443,7 @@ uint8_t TouchPad_pollActivity(HidEventTouchpad* dataPtr, uint8_t ignore)
 /// \param buff: The buff to retain fw version data, must be at least 2 bytes.
 /// \return Whether read is successful
 ///////////////////////////////////////////////////////////////////////////////
-uint8_t  TouchPad_readFirmwareVersion(uint8_t * buff)
+uint8_t  touchpad_readFirmwareVersion(uint8_t * buff)
 {
     return tpDrv->readFirmwareVersion(buff);
 }
@@ -454,7 +451,7 @@ uint8_t  TouchPad_readFirmwareVersion(uint8_t * buff)
 ///////////////////////////////////////////////////////////////////////////////
 //  Check whether data available is due to proximity
 ///////////////////////////////////////////////////////////////////////////////
-uint8_t  TouchPad_proximityRpt()
+uint8_t  touchpad_proximityRpt()
 {
     return tpDrv->proximityRpt();
 }
@@ -462,7 +459,7 @@ uint8_t  TouchPad_proximityRpt()
 ///////////////////////////////////////////////////////////////////////////////
 //  Retrieve absolute XY report data
 ///////////////////////////////////////////////////////////////////////////////
-AbsXYRptPtr TouchPad_getAbsFingerUpRpt()
+AbsXYRptPtr touchpad_getAbsFingerUpRpt()
 {
     AbsXYRptPtr rpt;
     if (tpDrv->fingerCount())         // if the finger status was down
@@ -477,7 +474,7 @@ AbsXYRptPtr TouchPad_getAbsFingerUpRpt()
 ///////////////////////////////////////////////////////////////////////////////
 //  Set TP enable status
 ///////////////////////////////////////////////////////////////////////////////
-void TouchPad_setEnable(uint8_t en)
+void touchpad_setEnable(uint8_t en)
 {
     intrVtblPtr->setInterruptEnable(&tpIntr, en);
 }
@@ -485,7 +482,7 @@ void TouchPad_setEnable(uint8_t en)
 ///////////////////////////////////////////////////////////////////////////////
 //  Get TP data info field
 ///////////////////////////////////////////////////////////////////////////////
-uint8_t TouchPad_getInfo()
+uint8_t touchpad_getInfo()
 {
     return tpDrv->getInfo();
 }
@@ -493,7 +490,7 @@ uint8_t TouchPad_getInfo()
 ///////////////////////////////////////////////////////////////////////////////
 //  Check if TP is active
 ///////////////////////////////////////////////////////////////////////////////
-uint8_t TouchPad_isActive()
+uint8_t touchpad_isActive()
 {
     return tpDrv->fingerCount();       // considered active when any finger is down
 }
@@ -501,7 +498,7 @@ uint8_t TouchPad_isActive()
 ///////////////////////////////////////////////////////////////////////////////
 //  Check if TP is functional
 ///////////////////////////////////////////////////////////////////////////////
-uint8_t TouchPad_isFunctional()
+uint8_t touchpad_isFunctional()
 {
     return pDev->verifiedWorking;
 }
@@ -509,7 +506,7 @@ uint8_t TouchPad_isFunctional()
 ///////////////////////////////////////////////////////////////////////////////
 //  Check finger count
 ///////////////////////////////////////////////////////////////////////////////
-uint8_t TouchPad_fingerCount()
+uint8_t touchpad_fingerCount()
 {
     return tpDrv->fingerCount();       // considered active when any finger is down
 }
@@ -518,7 +515,7 @@ uint8_t TouchPad_fingerCount()
 ///////////////////////////////////////////////////////////////////////////////
 //  Check if TP intr pin is active
 ///////////////////////////////////////////////////////////////////////////////
-uint8_t TouchPad_getPinActive()
+uint8_t touchpad_getPinActive()
 {
     return intrVtblPtr->isInterruptPinActive(&tpIntr);
 }
@@ -528,9 +525,178 @@ uint8_t TouchPad_getPinActive()
 /// \param waintInMs: time to wait for in msec
 /// \return Whether there is event before wait timeout
 ///////////////////////////////////////////////////////////////////////////////
-uint8_t TouchPad_waitForEvent(uint32_t waitInMs)
+uint8_t touchpad_waitForEvent(uint32_t waitInMs)
 {
     return tpDrv->waitForRDY(INTR_LVL_HIGH,waitInMs);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Callback to handle GPIO activity interrupt due to peripherals, e.g. touchpad
+////////////////////////////////////////////////////////////////////////////////
+void gpioActivityDetected(void *appData, uint8_t portPin)
+{
+    app_appActivityDetected(appData);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Poll touchpad activity
+////////////////////////////////////////////////////////////////////////////////
+uint8_t pollTouchpadActivity(void)
+{
+    // check for touuchpad
+    if (touchpad->getPinActive())
+    {
+        uint8_t dataAvailable;
+        dataAvailable = touchpad->pollActivity(&bleRemoteAppState->touchpadEvent, FALSE);
+
+        // ignore touchpad events?
+        if (!hidd_link_is_discoverable())
+        {
+            if (!hidd_is_paired())
+            {
+                if (!touchpad->proximityRpt())      // Don't use proximity finger event to initiate discovery
+                {
+                    hidd_link_connect();
+                }
+            }
+            else if ( dataAvailable )
+            {
+                if (dataAvailable != HID_EVENT_TP_INFO)
+                {
+                    if (!audio_is_active())
+                    {
+                        //WICED_BT_TRACE("\npollTouchpadActivity: dataAvailable=%d, prt=0x%x", dataAvailable, bleRemoteAppState->touchpadEvent.userDataPtr);
+                        wiced_hidd_event_queue_add_event_with_overflow(&app.eventQueue,
+                              &bleRemoteAppState->touchpadEvent.eventInfo,  sizeof(bleRemoteAppState->touchpadEvent),
+                              app.pollSeqn);
+
+                        return HIDLINK_ACTIVITY_REPORTABLE;
+                    }
+                }
+                return (hidd_link_is_connected() && !touchpad->proximityRpt())?
+                    HIDLINK_ACTIVITY_NONE : HIDLINK_ACTIVITY_REPORTABLE;
+            }
+        }
+    }
+    return HIDLINK_ACTIVITY_NONE;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Process TP event
+////////////////////////////////////////////////////////////////////////////////
+void app_procEvtTouchpad(void)
+{
+    HidEventUserDefine *tp_event = (HidEventUserDefine *)wiced_hidd_event_queue_get_current_element(&app.eventQueue);
+    AbsXYReport *tp = (AbsXYReport* )tp_event->userDataPtr;
+
+    //set gatt attribute value here before sending the report
+    memset(app_touchpad_rpt, 0, TOUCHPAD_REPORT_DATA_SIZE(tp));
+    memcpy(app_touchpad_rpt, TOUCHPAD_REPORT_DATA(tp), TOUCHPAD_REPORT_DATA_SIZE(tp));
+
+    hidd_link_send_report(tp->reportID, WICED_HID_REPORT_TYPE_INPUT, app_touchpad_rpt, TOUCHPAD_REPORT_DATA_SIZE(tp));
+}
+
+#if USE_TOUCHPAD_VIRTUAL_KEY
+////////////////////////////////////////////////////////////////////////////////
+/// Handle virtual key generation upon pressing key embedded under tocuhpad
+/// \param ke: On input the key event corresponding to touchpad key
+///            On output updated with the virtual key index based on zone touched.
+/// \return True if a virtual key pressed, i.e. a zone touched that maps to a key.
+////////////////////////////////////////////////////////////////////////////////
+static void virtual_key(uint8_t * keyCode, wiced_bool_t isDown)
+{
+    static uint8_t v_key;
+
+    if (isDown)
+    {
+        uint8_t zone = getZone();
+
+        // we translate the key if valid zone found
+        v_key = (zone < ZONE_UNDEFINED) ? zone + KB_MAX_KEYS : *keyCode;
+    }
+    *keyCode = v_key;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+void touchpad_validate_key(uint8_t * keyCode, wiced_bool_t down)
+{
+    if (touchpad && (TOUCHPAD_BUTTON_KEYINDEX == *keyCode))
+    {
+        // this function will update key event to the real event we want to send
+        sendKey = virtual_key(keyCode, down);
+    }
+}
+#endif
+///////////////////////////////////////////////////////////////////////////////
+// clear touchpad data buffer. If the last report was finger down, send finger up
+///////////////////////////////////////////////////////////////////////////////
+void touchpad_flush()
+{
+
+    if (touchpad)
+    {
+        touchpad->clearEvent();
+        AbsXYRptPtr tp = touchpad->getAbsFingerUpRpt();
+        if (tp)
+        {
+            //set gatt attribute value here before sending the report
+            memset(app_touchpad_rpt, 0, TOUCHPAD_RPT_PAYLOAD_SIZE);
+            memcpy(app_touchpad_rpt, TOUCHPAD_REPORT_DATA(tp), TOUCHPAD_REPORT_DATA_SIZE(tp));
+
+            hidd_link_send_report(tp->reportID, WICED_HID_REPORT_TYPE_INPUT, app_touchpad_rpt, TOUCHPAD_REPORT_DATA_SIZE(tp));
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
+wiced_bool_t touchpad_event(wiced_hidd_app_event_queue_t * eventQ)
+{
+    HidEventUserDefine *pEvt;
+    wiced_bool_t handled = FALSE;
+
+    while (((pEvt = (HidEventUserDefine *)wiced_hidd_event_queue_get_current_element(eventQ)) != NULL) &&
+           ((pEvt->eventInfo.eventType == HID_EVENT_TP_FINGER_STATUS_CHANGE) || (pEvt->eventInfo.eventType == HID_EVENT_TP_DATA)))
+    {
+        app_procEvtTouchpad();
+        wiced_hidd_event_queue_remove_current_element(eventQ);
+        handled = TRUE;
+    }
+
+    return handled;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+void touchpad_init(void (*callBack)(void*, uint8_t))
+{
+    touchpad = TouchPad(callBack, NULL);
+
+    //touchpad event
+    bleRemoteAppState->touchpadEvent.eventInfo.eventType = HID_EVENT_TP_DATA;
+
+    if (wiced_hal_mia_is_reset_reason_por())
+    {
+        touchpad->reInitialize();
+    }
+    else
+    {
+        touchpad->setEnable(TRUE);
+    }
+
+    // reenforce GPIO configuration so we don't lose it after entering uBCS
+    wiced_hal_gpio_slimboot_reenforce_cfg(GPIO_RSTN_TP, GPIO_OUTPUT_ENABLE);
+}
+#else // !SUPPORT_TOUCHPAD
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+void touchpad_init(void (*callBack)(void*, uint8_t))
+{
+ #ifdef REMOTE_PLATFROM
+    wiced_hal_gpio_configure_pin(GPIO_RSTN_TP, GPIO_OUTPUT_ENABLE, GPIO_TOUCHPAD_OFF);
+ #endif
 }
 
 #endif // SUPPORT_TOUCHPAD

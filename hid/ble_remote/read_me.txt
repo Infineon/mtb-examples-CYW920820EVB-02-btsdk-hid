@@ -54,6 +54,7 @@ To demonstrate the app, walk through the following steps -
 In case what you have is the WICED EVAL board, you can either use fly wire to connect
 to GPIOs to simulate key press and release. Or using the ClientControl tool in the
 tools to simulate key press and release.
+
 1. Plug the WICED EVAL board into your computer.
    When using CYW920819EVB_02/CYW920820EVB_02, remove the 'PERIPHERAL ENABLE' J18
    and 'THERMISTER ENABLE" J14 jumpers.
@@ -64,23 +65,35 @@ tools to simulate key press and release.
     and remove the wire to simulate key release.
 5. Once connected, it becomes the remote control of the TV.
 
+To use ClientControl tool + WICED EVAL board to simulate key press and release, launch ClientControl
+from MTB Tool section. Make sure you use "TESTING_USING_HCI=1" in application settings.
+208xx device and 20735 device firmware behaves differently. The following steps
+shows how to establish communication between ClientControl and the device.
 
-To use ClientControl tool + WICED EVAL board to simulate key press and release.
-NOTE: Make sure you use "TESTING_USING_HCI=1" in application settings.
-In ModusToolbox, select right click on app and select 'Change Application Settings'
+For 20819/20820 devices
+-----------------
+1. Plug the hardware into your computer
+2. Build and download the application
+3. Run ClientControl.exe.
+4. Choose 3M as Baudrate and select the serial port in ClientControl tool window.
+5. Open the port and then reset the device. Close and re-open the port so the HID tab gets activated.
 
-1~3. same download procedure as above
-4. Run ClientControl.exe.
-5. Choose 3M as Baudrate and select the serial port in ClientControl tool window.
-6. Press Reset button on the board and open the port.
-7. Press "Enter Pairing Mode"or "Connect" to start LE advertising, then pair with a
-   PC or Tablet
-8. Once connected, it becomes the remote control of the TV.
- - Select Interrupt channel, Input report, enter the contents of the report
-   and click on the Send button, to send the report.  For example to send
-   key down event when key '1' is pushed, report should be
-   01 00 00 1e 00 00 00 00 00.  All keys up 01 00 00 00 00 00 00 00 00.
-   Please make sure you always send a key up report following key down report.
+For 20735/20835 devices
+-----------------
+1. Plug the hardware into your computer
+2. Build and download the application
+3. Run ClientControl.exe.
+4. Choose 3M as Baudrate and select the serial port in ClientControl tool window.
+5. Reset the device. (Press reset button or unplug/plug the USB cable)
+   Within 2 seconds, before the device enters deep sleep, open the port.
+   If HIDD tab is not activated, close the port and repeat step 5.
+
+Once the HID tab is activated, the HID buttons will become available.
+6. Click on "Enter Pairing Mode" to start advertisement, then pair with a PC or Tablet.
+7. Once connected, it becomes the remote of the PC or Tablet.
+8  Click on the key buttons, to send the key reports.  For example to send
+   key down event when key '1' is pushed, report should be 01 00 00 1e 00 00 00 00 00.
+   When key is released, it should send all keys up 01 00 00 00 00 00 00 00 00.
 
 Notes
 -----
@@ -216,15 +229,39 @@ ENABLE_IR
 
 Key Matrix
 ----------
+When TESTING_USING_HCI is enabled, the key Matrix is disabled.
+Key Matrix (ROW,COL)
+Key index n = col*ROW + row
+row = n % ROW
+col = n / ROW
+
+For example, to find the key index with row=1 and col=3 with key matrix 5x4, (ROW, COL)=(5, 4)
+key index n = col*ROW + row = 3*5 + 1 = 16
+
+To find out row and col for index 16, row = 16 % 5 = 1, col = 16 / 3 = 3
+
+20735:
+------
+Flatform: CYW920735Q60EVB-01
 Key Matrix (ROW,COL) = (5,4) = (P00..P04, P08..P11)
-Key index n = (row, col) = (n % ROW, n / ROW). For example, when n = 16,
-since we have ROW=5, row = 16%5 = 1, colomn = 16/5 = 3, therefore row=1, col=3
 
-AUDIO Key Index     16 = (row=1, col=3) = (P01, P11)
-IR Key Index        17 = (row=2, col=3) = (P02, P11)
-Pairing Key Index   18 = (row=3, col=3) = (P03, P11)
+AUDIO Key Index     16 = (row=1, col=3) = (P01, P11) = (ARD_RST, A3)
+IR Key Index        17 = (row=2, col=3) = (P02, P11) = (D4, A3)
+Pairing Key Index   18 = (row=3, col=3) = (P03, P11) = (D5, A3)
 
-Platforms
----------
-CYW920819EVB_02/CYW920820EVB_02
-CYW920735Q60EVB-01
+208xx:
+------
+Actual Remote platform (CYW920820REF-RM-01):
+Key Matrix (ROW,COL) = (7,7) = (P00..P06, P08..P14)
+
+AUDIO Key Index     23 = (row=2, col=3) = (P02, P11)
+IR Key Index         0 = (row=0, col=0) = (P00, P08)
+Pairing Key Index   29 = (row=1, col=4) = (P03, P11)
+
+Wiced Eval Board platform (CYW9208xxEVB-02):
+Since some pins are not available on wiced CYW9208xxEVB evalueation board, when
+TARGET=CYW9208xxEVB-02 is used the following 3 key indexes are translated to actual platform key index:
+
+AUDIO Key Index     16 = (row=2, col=2) = (P02, P10) = (D4, A2) will be translate to key index 23
+IR Key Index         0 = (row=0, col=0) = (P00, P08) = (D2, A0)
+Pairing Key Index    8 = (row=1, col=1) = (P01, P09) = (ARD_RST, D13) will be translate to key index 29

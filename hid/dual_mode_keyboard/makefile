@@ -38,31 +38,28 @@ endif
 #
 # Basic Configuration
 #
-APPNAME=BLE_HID_Remote
+APPNAME=DUAL_HID_Keyboard
 TOOLCHAIN=GCC_ARM
 CONFIG=Debug
 VERBOSE=
 
 # default target
 TARGET=CYW920820EVB-02
+#TARGET=CYW920819EVB-02
 #TARGET=CYW920820EVB-02
 #TARGET=CYW920735Q60EVB-01
 
-#TARGET=CYW920820REF-RM-01
-
 SUPPORTED_TARGETS = \
+  CYW920819REF-KB-01 \
   CYW920819EVB-02 \
   CYW920820EVB-02 \
   CYW920735Q60EVB-01 \
 
-#  CYW920820REF-RM-01
-
 TARGET_DEVICE_MAP = \
+  CYW920819REF-KB-01/20819A1 \
   CYW920819EVB-02/20819A1 \
   CYW920820EVB-02/20820A1 \
   CYW920735Q60EVB-01/20735B1 \
-
-#  CYW920820REF-RM-01/20820A1
 
 CY_TARGET_DEVICE = $(patsubst $(TARGET)/%,%,$(filter $(TARGET)%,$(TARGET_DEVICE_MAP)))
 
@@ -82,7 +79,6 @@ INCLUDES=\
     $(CY_BASELIB_PATH)/internal/$(CY_TARGET_DEVICE) \
     $(CY_SHARED_PATH)/dev-kit/btsdk-include \
     $(CY_BSP_PATH)
-
 DEFINES=
 VFP_SELECT=
 CFLAGS=
@@ -105,22 +101,15 @@ CY_APP_PATCH_LIBS += wiced_hidd_lib.a
 #ifeq ($(TARGET), CYW920819EVB-02)
 # # use app specific design.modus
 # DISABLE_COMPONENTS+=bsp_design_modus
-# COMPONENTS+=CYW920819EVB-02_RM_design_modus
+# COMPONENTS+=CYW920819EVB-02_KB_design_modus
 # INCLUDES+=$(CY_APP_PATH)/COMPONENT_CYW920819EVB-02_RM_design_modus/GeneratedSource
 #endif
 
 #ifeq ($(TARGET), CYW920820EVB-02)
 # # use app specific design.modus
 # DISABLE_COMPONENTS+=bsp_design_modus
-# COMPONENTS+=CYW920820EVB-02_RM_design_modus
-# INCLUDES+=$(CY_APP_PATH)/COMPONENT_CYW920820EVB-02_RM_design_modus/GeneratedSource
-#endif
-
-#ifeq ($(TARGET),CYW920735Q60EVB-01)
-# # use app specific design.modus
-# DISABLE_COMPONENTS+=bsp_design_modus
-# COMPONENTS+=CYW920735Q60EVB-01_RM_design_modus
-# INCLUDES+=$(CY_APP_PATH)/COMPONENT_CYW920735Q60EVB-01_RM_design_modus/GeneratedSource
+# COMPONENTS+=CYW920820EVB-02_KB_design_modus
+# INCLUDES+=$(CY_APP_PATH)/COMPONENT_CYW920820EVB-02_KB_design_modus/GeneratedSource
 #endif
 
 #######################################################################################
@@ -128,139 +117,109 @@ CY_APP_PATCH_LIBS += wiced_hidd_lib.a
 #
 # All flags can be defined in command line. When it is not defined, the following default value is used.
 # Set to 1 to enable, 0 to disable.
-#
 
-####################################################
-# To use ClientControl to control the device via HCI_UART port, TESTING_USING_HCI flag must be turned
+##########
+# Bluetooth capability flags
+# When both LE and BREDR are enabled together, the device will be in dual mode, capabable to connect host using LE or BREDR
+# At least one of LE or BREDR flag should be set.
+
+# To enable LE capability
+LE_DEFAULT=1
+
+# To enable BR/EDR capability
+BREDR_DEFAULT=1
+
+##########
+# To enable HCI_UART for ClientControl
 TESTING_USING_HCI_DEFAULT=1
 
-####################################################
-# SLEEP_ALLOWED
-#  SLEEP_ALLOWED=0  Disable sleep function
-#  SLEEP_ALLOWED=1  Allow sleep without shutdown
-#  SLEEP_ALLOWED=2  Allow sleep with shutdown
-#
-ifeq ($(TARGET), CYW920735Q60EVB-01)
- SLEEP_ALLOWED_DEFAULT=1
-else
- SLEEP_ALLOWED_DEFAULT=2
-endif
-
-####################################################
-# LED
-#  LED=0  Disable LED functions (Good for power consumption measurement)
-#  LED=1  Use LED for status indication
-#
-LED_SUPPORT_DEFAULT=1
-
-####################################################
+##########
+# Enable OTA capability
 # Use OTA_FW_UPGRADE=1 to enable Over-the-air firmware upgrade functionality
 # Use OTA_SEC_FW_UPGRADE=1 in the make target to use secure OTA procedure.
-# OTA_SEC_FW_UPGRADE_DEFAULT takes effect only when OTA_FW_UPGRADE_DEFAULT=1
-#
+# OTA_SEC_FW_UPGRADE_DEFAULT flag takes effect only if OTA_FW_UPGRADE_DEFAULT=1
 OTA_FW_UPGRADE_DEFAULT=0
  OTA_SEC_FW_UPGRADE_DEFAULT=0
 
-####################################################
-# Use ENABLE_AUDIO=1 to enable audio microphone
-# When ENABLE_ANDROID_AUDIO is enabled, ENABLE_AUDIO is forced to be 1, ADPCM_ENCODER is forced to 1
-# Audio encoding flags takes effect only if ENABLE_AUDIO flag is turned on.
-# Use OPUS_CELT_ENCODER=1 to use OPUS CELT encoder, or
-# Use ADPCM_ENCODER=1 to use ACPCM encoder, when not defined, the default is mSBC.
-# Both OPUS_CELT_ENCODER and ADPCM_ENCODER flags cannot be turned on at the same time.
-# Use ENABLE_DIGITAL_MIC=1 to enable digital microphone, ENABLE_DIGITAL_MIC=0 to use analog microphone
-#
-ifeq ($(TARGET), CYW920735Q60EVB-01)
- ENABLE_AUDIO_DEFAULT=1
- ENABLE_ANDROID_AUDIO_DEFAULT=0
- OPUS_CELT_ENCODER_DEFAULT=1
- ADPCM_ENCODER_DEFAULT=0
- ENABLE_DIGITAL_MIC_DEFAULT=0
-else
- ENABLE_AUDIO_DEFAULT=0
- ENABLE_ANDROID_AUDIO_DEFAULT=0
- OPUS_CELT_ENCODER_DEFAULT=1
- ADPCM_ENCODER_DEFAULT=0
- ENABLE_DIGITAL_MIC_DEFAULT=1
-endif
+##########
+# SLEEP_ALLOWED
+#  SLEEP_ALLOWED_DEFAULT=0  Disable sleep function
+#  SLEEP_ALLOWED_DEFAULT=1  Allow sleep without shutdown
+#  SLEEP_ALLOWED_DEFAULT=2  Allow sleep with ePDS
+#  SLEEP_ALLOWED_DEFAULT=3  Allow sleep with HIDOFF
+SLEEP_ALLOWED_DEFAULT=2
 
-####################################################
-# Link related flags
+##########
+# LED
+#  LED_SUPPORT_DEFAULT=0  Disable LED functions (Good for power consumption measurement)
+#  LED_SUPPORT_DEFAULT=1  Use LED for status indication
+LED_SUPPORT_DEFAULT=1
 
+##########
 # Use AUTO_RECONNECT=1 to automatically reconnect when connection drops
 AUTO_RECONNECT_DEFAULT=0
 
+##########
+# LE link control flags. Those flags takes effect only if LE capability is turned on
+#
+# Use ASSYMETRIC_SLAVE_LATENCY=1 if master won't accept slave connection parameter update request
+ ASSYMETRIC_SLAVE_LATENCY_DEFAULT=0
+#
+# Use LE_LOCAL_PRIVACY=1 to advertise with Resolvable Private Address (RPA)
+ LE_LOCAL_PRIVACY_DEFAULT=0
+#
 # Use SKIP_PARAM_UPDATE=1 to not request connection parameter update immediately when
 # received LE conn param update complete event with non-preferred values
-SKIP_PARAM_UPDATE_DEFAULT=1
+ SKIP_PARAM_UPDATE_DEFAULT=1
+#
+# DISCONNECTED_ENDLESS_ADV=1 to do endless advertisement without expiration period.
+ DISCONNECTED_ENDLESS_ADV_DEFAULT=0
+##########
 
-# Use START_ADV_ON_POWERUP=1 to start advertising on power up. If paired it reconnect when power up.
-START_ADV_ON_POWERUP_DEFAULT=0
 
-# Use ENABLE_CONNECTED_ADV=1 to enable advertising while connected
-ENABLE_CONNECTED_ADV_DEFAULT=0
-
-# Use DISCONNECTED_ENDLESS_ADV=1 to enable endless advertising. Otherwise, the advertisement expires in given period.
-DISCONNECTED_ENDLESS_ADV_DEFAULT=0
-
-# Use ASSYMETRIC_SLAVE_LATENCY=1 if master won't accept slave connection parameter update request.
-ASSYMETRIC_SLAVE_LATENCY_DEFAULT=0
-
-# Use LE_LOCAL_PRIVACY=1 to advertise with Resolvable Private Address (RPA)
-LE_LOCAL_PRIVACY_DEFAULT=0
-
-####################################################
-#Perpherals and other features
-
-# Use ENABLE_IR=1 to enable IR support
-ENABLE_IR_DEFAULT=0
-
-# Use ENABLE_EASY_PAIR=1 to enable Easy Pair feature
-ENABLE_EASY_PAIR_DEFAULT=0
-
-# Use ENABLE_FINDME=1 to enable Find Me profile support
-ENABLE_FINDME_DEFAULT=0
-
-#######################################################################################
 XIP?=xip
 BT_DEVICE_ADDRESS?=default
 UART?=AUTO
-TESTING_USING_HCI ?= $(TESTING_USING_HCI_DEFAULT)
-OTA_FW_UPGRADE ?= $(OTA_FW_UPGRADE_DEFAULT)
-OTA_SEC_FW_UPGRADE ?= $(OTA_SEC_FW_UPGRADE_DEFAULT)
-ENABLE_ANDROID_AUDIO ?= $(ENABLE_ANDROID_AUDIO_DEFAULT)
-ENABLE_AUDIO ?= $(ENABLE_AUDIO_DEFAULT)
-OPUS_CELT_ENCODER ?= $(OPUS_CELT_ENCODER_DEFAULT)
-ADPCM_ENCODER ?= $(ADPCM_ENCODER_DEFAULT)
-ENABLE_DIGITAL_MIC ?= $(ENABLE_DIGITAL_MIC_DEFAULT)
-AUTO_RECONNECT ?= $(AUTO_RECONNECT_DEFAULT)
-ENABLE_IR ?= $(ENABLE_IR_DEFAULT)
-AUTO_RECONNECT ?= $(AUTO_RECONNECT_DEFAULT)
-SKIP_PARAM_UPDATE ?= $(SKIP_PARAM_UPDATE_DEFAULT)
-ENABLE_EASY_PAIR ?= $(ENABLE_EASY_PAIR_DEFAULT)
-LE_LOCAL_PRIVACY ?= $(LE_LOCAL_PRIVACY_DEFAULT)
-START_ADV_ON_POWERUP ?= $(START_ADV_ON_POWERUP_DEFAULT)
-ENABLE_CONNECTED_ADV ?= $(ENABLE_CONNECTED_ADV_DEFAULT)
-DISCONNECTED_ENDLESS_ADV ?= $(DISCONNECTED_ENDLESS_ADV_DEFAULT)
-ENABLE_FINDME ?= $(ENABLE_FINDME_DEFAULT)
-ASSYMETRIC_SLAVE_LATENCY ?= $(ASSYMETRIC_SLAVE_LATENCY_DEFAULT)
-SLEEP_ALLOWED ?= $(SLEEP_ALLOWED_DEFAULT)
-LED ?= $(LED_SUPPORT_DEFAULT)
+TESTING_USING_HCI?=$(TESTING_USING_HCI_DEFAULT)
+OTA_FW_UPGRADE?=$(OTA_FW_UPGRADE_DEFAULT)
+OTA_SEC_FW_UPGRADE?=$(OTA_SEC_FW_UPGRADE_DEFAULT)
+ASSYMETRIC_SLAVE_LATENCY?=$(ASSYMETRIC_SLAVE_LATENCY_DEFAULT)
+LE_LOCAL_PRIVACY?=$(LE_LOCAL_PRIVACY_DEFAULT)
+SKIP_PARAM_UPDATE?=$(SKIP_PARAM_UPDATE_DEFAULT)
+AUTO_RECONNECT?=$(AUTO_RECONNECT_DEFAULT)
+SLEEP_ALLOWED?=$(SLEEP_ALLOWED_DEFAULT)
+DISCONNECTED_ENDLESS_ADV?=$(DISCONNECTED_ENDLESS_ADV_DEFAULT)
+LED?=$(LED_SUPPORT_DEFAULT)
+LE?=$(LE_DEFAULT)
+BREDR?=$(BREDR_DEFAULT)
+
+ifeq ($(TARGET), CYW920735Q60EVB-01)
+ ifeq ($(BREDR), 1)
+#  $(error TARGET $(TARGET) does not support BR/EDR)
+  $(warning *********************************************************************)
+  $(warning TARGET $(TARGET) does not support BR/EDR BREDR=0 is enforced)
+  $(warning *********************************************************************)
+  BREDR=0
+  LE=1
+ endif
+endif
 
 #
 # App defines
 #
 CY_APP_DEFINES = \
+  -DWICED_BT_TRACE_ENABLE \
   -DSUPPORT_KEYSCAN \
   -DBATTERY_REPORT_SUPPORT \
-  -DBLE_SUPPORT \
   -DSUPPORT_KEY_REPORT \
-  -DWICED_BT_TRACE_ENABLE \
-  -DLED_SUPPORT=$(LED) \
-  -DSLEEP_ALLOWED=$(SLEEP_ALLOWED)
+  -DSLEEP_ALLOWED=$(SLEEP_ALLOWED) \
+  -DLED_SUPPORT=$(LED)
 
-ifeq ($(TARGET), CYW920820REF-RM-01)
- CY_APP_DEFINES += -DREMOTE_PLATFORM
+# SUPPORT_CODE_ENTRY requires SUPPORT_KEYSCAN to be enabled
+#CY_APP_DEFINES += -DSUPPORT_CODE_ENTRY
+
+ifeq ($(TARGET), CYW920819REF-KB-01)
+ CY_APP_DEFINES += -DKEYBOARD_PLATFORM
 endif
 
 ifeq ($(hci_dump), 1)
@@ -269,104 +228,6 @@ else
  ifeq ($(TESTING_USING_HCI),1)
   CY_APP_DEFINES += -DTESTING_USING_HCI
  endif
-endif
-
-ifeq ($(ASSYMETRIC_SLAVE_LATENCY),1)
- CY_APP_DEFINES += -DASSYM_SLAVE_LATENCY
-endif
-
-ifeq ($(SKIP_PARAM_UPDATE),1)
- CY_APP_DEFINES += -DSKIP_CONNECT_PARAM_UPDATE_EVEN_IF_NO_PREFERED
-endif
-
-ifeq ($(DISCONNECTED_ENDLESS_ADV),1)
- CY_APP_DEFINES += -DENDLESS_LE_ADVERTISING_WHILE_DISCONNECTED
-endif
-
-ifeq ($(BREDR),1)
- CY_APP_DEFINES += -DBR_EDR_SUPPORT
-endif
-
-ifeq ($(TESTING_USING_HCI),1)
- CY_APP_DEFINES += -DTESTING_USING_HCI
-endif
-
-ifeq ($(ENABLE_ANDROID_AUDIO),1)
- ENABLE_AUDIO=1
-endif
-
-ifeq ($(ENABLE_AUDIO),1)
- CY_APP_DEFINES += -DSUPPORT_AUDIO
-
- ifeq ($(ENABLE_ANDROID_AUDIO),1)
-  CY_APP_DEFINES += -DANDROID_AUDIO
-  ifneq ($(OPUS_CELT_ENCODER),0)
-   $(error OPUS_CELT encoding is not supported in Android audio)
-  endif
-  ifneq ($(ADPCM_ENCODER),1)
-   $(warning Android audio is using ADPCM encording, ADPCM_ENCODER=1 is enforced)
-   ADPCM_ENCODER=1
-  endif
- else
-  CY_APP_DEFINES += -DHID_AUDIO
-  # send audio data as 1 big gatt packet
-  CY_APP_DEFINES += -DATT_MTU_SIZE_180
- endif
-
- #enabled audio enhancement
- CY_APP_DEFINES += -DENABLE_ADC_AUDIO_ENHANCEMENTS
-
- #CY_APP_PATCH_LIBS += adc_audio_lib.a
-
- ifeq ($(OPUS_CELT_ENCODER), 1)
-  ifeq ($(ADPCM_ENCODER),1)
-   $(error Multiple audio encoding: OPUS_CELT and ADPCM cannot be enabled at the same time)
-  endif
-  #use OPUS CELT encoder
-  CY_APP_DEFINES += -DCELT_ENCODER
- else
-  ifeq ($(ADPCM_ENCODER), 1)
-   CY_APP_DEFINES += -DADPCM_ENCODER
-   CY_APP_PATCH_LIBS += adpcm_lib.a
-  else
-   #use mSBC encoder
-   CY_APP_DEFINES += -DSBC_ENCODER
-   #enabled only if 256 Kbyte/2M Bit Sflash is used; default is 512 Kbyte/4M Bit Sflash
-   #CY_APP_DEFINES += -DSFLASH_SIZE_2M_BITS
-  endif # ADPCM_ENCODER
- endif # OPUS_CELT_ENCODER
-
- ifeq ($(ENABLE_DIGITAL_MIC),1)
-  CY_APP_DEFINES += -DSUPPORT_DIGITAL_MIC
- endif
-endif # ENABLE_AUDIO
-
-ifeq ($(AUTO_RECONNECT),1)
- CY_APP_DEFINES += -DAUTO_RECONNECT
-endif
-
-ifeq ($(ENABLE_EASY_PAIR),1)
- CY_APP_DEFINES += -DEASY_PAIR
-endif
-
-ifeq ($(START_ADV_ON_POWERUP),1)
- CY_APP_DEFINES += -DSTART_ADV_WHEN_POWERUP_NO_CONNECTED
-endif
-
-ifeq ($(ENABLE_CONNECTED_ADV),1)
- CY_APP_DEFINES += -DCONNECTED_ADVERTISING_SUPPORTED
-endif
-
-ifeq ($(LE_LOCAL_PRIVACY),1)
- CY_APP_DEFINES += -DLE_LOCAL_PRIVACY_SUPPORT
-endif
-
-ifeq ($(ENABLE_FINDME),1)
- CY_APP_DEFINES += -DSUPPORTING_FINDME
-endif
-
-ifeq ($(ENABLE_IR),1)
- CY_APP_DEFINES += -DSUPPORT_IR
 endif
 
 ifeq ($(OTA_FW_UPGRADE),1)
@@ -384,6 +245,39 @@ else
   $(error setting OTA_SEC_FW_UPGRADE=1 requires OTA_FW_UPGRADE also set to 1)
  endif # OTA_SEC_FW_UPGRADE
 endif # OTA_FW_UPGRADE
+
+ifeq ($(LE),1)
+ CY_APP_DEFINES += -DBLE_SUPPORT
+
+ ifeq ($(ASSYMETRIC_SLAVE_LATENCY),1)
+  CY_APP_DEFINES += -DASSYM_SLAVE_LATENCY
+ endif
+
+ ifeq ($(SKIP_PARAM_UPDATE),1)
+  CY_APP_DEFINES += -DSKIP_CONNECT_PARAM_UPDATE_EVEN_IF_NO_PREFERED
+ endif
+
+ ifeq ($(DISCONNECTED_ENDLESS_ADV),1)
+  CY_APP_DEFINES += -DENDLESS_LE_ADVERTISING_WHILE_DISCONNECTED
+ endif
+
+ ifeq ($(LE_LOCAL_PRIVACY),1)
+  CY_APP_DEFINES += -DLE_LOCAL_PRIVACY_SUPPORT
+ endif
+
+else
+ ifeq ($(BREDR),0)
+  $(error Either LE or BREDR must be enabled)
+ endif
+endif
+
+ifeq ($(BREDR),1)
+ CY_APP_DEFINES += -DBR_EDR_SUPPORT
+endif
+
+ifeq ($(AUTO_RECONNECT),1)
+ CY_APP_DEFINES += -DAUTO_RECONNECT
+endif
 
 ################################################################################
 # Paths

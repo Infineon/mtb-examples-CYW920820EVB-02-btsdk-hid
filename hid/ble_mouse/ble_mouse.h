@@ -66,7 +66,11 @@
 #ifdef MOUSE_PLATFORM
  #define P_MOTION_IDX  WICED_PLATFORM_GPIO_1   // Use P17 for motion int
 #else
- #define P_MOTION_IDX  WICED_PLATFORM_GPIO_8   // Use P13 (A5 for EVB02)
+ #if is_20735Family
+  #define P_MOTION_IDX  WICED_PLATFORM_GPIO_4   // Use P13 (A5 for 20735-EVB01)
+ #else
+  #define P_MOTION_IDX  WICED_PLATFORM_GPIO_8   // Use P13 (A5 for 208xx-EVB02)
+ #endif
 #endif
 
 #define P_LED       WICED_GET_PIN_FOR_LED(P_LED_IDX)

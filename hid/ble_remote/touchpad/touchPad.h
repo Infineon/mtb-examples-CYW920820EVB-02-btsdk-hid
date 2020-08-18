@@ -37,10 +37,22 @@
  *
  */
 
-#ifdef SUPPORT_TOUCHPAD
-
 #ifndef __TOUCHPAD_H__
 #define __TOUCHPAD_H__
+
+#define GPIO_TOUCHPAD_OFF           0
+#define GPIO_TOUCHPAD_ON            1
+
+enum {
+    ZONE_CENTER = 0,
+    ZONE_RIGHT,
+    ZONE_LEFT,
+    ZONE_DOWN,
+    ZONE_UP,
+    ZONE_MAX_COUNT,
+};
+
+#ifdef SUPPORT_TOUCHPAD
 
 #include "../interrupt.h"
 #include "IQS5xx.h"
@@ -51,16 +63,7 @@
 #define TOUCHPAD_FIFO_CNT       46
 #define MAX_TP_EVENT_DELAY_IN_MS    100
 #define STUCK_FINGER_TIMEOUT_mS     200 // 200ms
-enum {
-    ZONE_CENTER = 0,
-    ZONE_RIGHT,
-    ZONE_LEFT,
-    ZONE_DOWN,
-    ZONE_UP,
-    ZONE_MAX_COUNT,
-    ZONE_UNDEFINED = ZONE_MAX_COUNT,
-};
-
+#define ZONE_UNDEFINED ZONE_MAX_COUNT
 enum {
     CLICK_NONE,
     CLICK_LEFT,
@@ -100,7 +103,6 @@ typedef struct
 {
     void  (*initialize)();  // should be called only if POR
     void  (*reInitialize)();
-    void  (*shutdown)();
     void  (*clearEvent)();
     void  (*setEnable)(uint8_t en);
     uint8_t  (*getInfo)();
@@ -109,7 +111,6 @@ typedef struct
     uint8_t (*getPinActive)();
     uint8_t  (*fingerCount)();
     uint8_t  (*waitForEvent)(uint32_t waitInMs);
-    uint8_t  (*getZone)();
     uint8_t  (*getLeftRight)();
     uint8_t  (*wakeUp)();
     uint8_t  (*readFirmwareVersion)(uint8_t * buff);
@@ -120,7 +121,6 @@ typedef struct
 } TouchPadIf_t;
 
 TouchPadIf_t * TouchPad(void (*callBack)(void*, uint8_t), void * parent);
-
 
 typedef struct
 {
@@ -133,7 +133,28 @@ typedef struct
     uint8_t          fingerStuckTimerOn; // local varible to save calls to wiced_xxx_timer()
     uint8_t          tpActive;
 #endif
-} TouchPad_t;
-#endif
+} touchpad_t;
 
+ #define touchpad_is_active() touchpad_isActive()
+ void touchpad_shutdown();
+ #define touchpad_pollActivity(status) {status |= pollTouchpadActivity();}
+ #if USE_TOUCHPAD_VIRTUAL_KEY
+ void touchpad_validate_key(uint8_t * keyCode, wiced_bool_t down);
+ #else
+ #define touchpad_validate_key(key, down)
+ #endif
+ void touchpad_flush();
+ wiced_bool_t touchpad_event(wiced_hidd_app_event_queue_t * eventQ);
+#else
+ #define touchpad_is_active() 0
+ #define touchpad_shutdown()
+ #define touchpad_pollActivity(status)
+ #define touchpad_validate_key(key, down)
+ #define touchpad_flush()
+ #define touchpad_event(q) FALSE
 #endif // SUPPORT_TOUCHPAD
+
+#define gpioActivityDetected NULL
+void touchpad_init(void (*callBack)(void*, uint8_t));
+
+#endif // __TOUCHPAD_H__
